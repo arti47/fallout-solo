@@ -1,0 +1,133 @@
+# Fallout: Wasteland Wanderer - Solo RPG Companion App
+
+## App Description
+A digital companion and virtual game master for the "Fallout: Wasteland Wanderer" solo roleplaying game. This application digitizes the entire Pip-Boy Sheet experience, automates dice rolling and rule calculations, and acts as the "Notepad" for the player's journal, allowing them to focus entirely on storytelling and exploration.
+
+### Key Features Implemented:
+- **Digital Pip-Boy Interface**: Tracks Stats (HP, Luck, AP, Level), Inventory (Supplies, Caps, Gear), Data (NPCs, Quests), and an interactive 25-square Map grid.
+- **Automated Character Creation**: Guides the player through the 7 stages of character creation.
+- **2d20 Dice Roller Engine**: Handles Skill Tests by calculating Target Numbers automatically, accounting for Tag skills (criticals), and registering complications.
+- **Complete Book Data** (`src/data/`): All rulebook tables transcribed — full bestiary (39 stat blocks with special abilities, `bestiary.ts`), all ~40 perks (`perks.ts`), complete loot/economy tables with item values, conditions, and modifications (`lootTables.ts`), full NPC + Dangerous NPC generation (`npcTables.ts`), the complete side-quest pipeline with all 18 goal types and narrative prompts plus all 10 main-quest blockers and the Clear Blocker table (`questTables.ts`), location/encounter generation with narrative questions (`encounters.ts`), injuries/Miraculous Escape/reputation/Known Vaults/foe-encounter tables (`characterTables.ts`), and all Pick-a-Path action definitions (`actions.ts`).
+- **In-App Codex** (`src/data/codex.ts`, `src/pages/CodexTab.tsx`): The full rulebook text bundled into the app (7 chapters as raw markdown imports) with a searchable chapter browser in a dedicated Codex tab.
+- **Integrated Journal**: A built-in rich text notepad for the player to log their story, complete with auto-tagging for mechanical actions (e.g., `[SYSTEM] Consumed Stimpak. Effects applied.`).
+- **Retro Custom Modals**: All native browser alerts and confirms have been stripped out and replaced with a global custom retro-themed Pip-Boy Modal system (`GlobalModal.tsx` powered by `uiState.ts`).
+- **Save State Management**: Local Storage persistence with an "Export/Import Save" feature.
+
+---
+
+## Current Architecture & State for AI Assistants
+
+The app lives in `app/` (Vite + React 19 + TypeScript + Tailwind + zustand). Build check: `cd app && npm run build`.
+
+### State Management (`src/store/`)
+- `gameState.ts`: `zustand` + `persist` (localStorage key `wasteland-wanderer-storage`). Holds character (stats, perks, injuries, description), inventory (gear with `value`/`condition`/`mods`), world (`sectorData` per-square: explored/settlement/faction/icon/truths/reputation), round engine state (`round`, `day`, `stage`, `inDanger`, `currentEncounter`, `scavengedThisRound`, `tradedThisRound`, `nextTestModifier`), quests (`mainQuest` incl. blocker location/Hunted threshold, `sideQuests`), `npcs`, combat (`activeFoes`, `combatState`, log), and settings (`soundEnabled`, `tutorialEnabled`, `seenTutorials`). `getInitialGameData()` is the single source of fresh-character defaults (used by Hard Reset). XP accumulates and is spent via `addPerk` (1 XP = 1 Perk = +1 Level).
+- `uiState.ts`: unpersisted overlay state for `<GlobalModal>` (alert/confirm). NOTE: GlobalModal closes BEFORE invoking callbacks so chained confirms survive.
+
+### Pages / Tabs (`src/pages/`)
+- **RoundTab** (primary play surface): the guided Travel → Encounter → Take Action → Journal loop. Contains the `ActionResolver` (2d20 tests with best-skill preselection, auto-detected modifiers, reputation modifier, Try-Your-Luck, AP spends, selectable complications with applied effects via the choice-effect interpreter, Trade shop, Mod & Repair workbench, one-tap smart Rest), encounter auto-population (parses `[FOE]`/`[NPC]`/`[SIDE QUEST]`/`[CHEM]` tokens into real game objects), Begin Combat handoff, side-quest completion with real rewards (`applyQuestReward`), Clear Blocker flow, Mobile/Hunted travel rolls, and on-demand location generation/conversion for any map square.
+- **CombatTab**: full engine UI — Oppose/Slaughter/Outwit/De-escalate/Retreat, Endure interrupt on incoming damage, threat-order foe turns, selectable complications, per-foe loot, auto-return to the Round when combat ends.
+- **StatsTab**: vitals, S.P.E.C.I.A.L., skills, perks/injuries list, Make Camp, and a Level Up button (opens the perk picker) whenever XP ≥ 1.
+- **InventoryTab**: caps/supplies/gear, equip + consume (effects applied).
+- **DataTab**: GEN panel (10 one-tap generators, all persisted + journaled), real quest log (main + side with DROP), persistent Known NPCs roster, save export/import, story export, sound/tutorial toggles, Hard Reset.
+- **MapTab**: legacy free-roam map view (the Round tab is the guided path).
+- **JournalTab**: the story log (typing ticks; auto `[SYSTEM]` entries from everywhere).
+- **CodexTab**: searchable rulebook browser with real table rendering.
+- **CharacterCreation** (`creation/Step1-7`): book-exact wizard; stages auto-advance when complete (points spent, tags picked, gear chosen).
+
+### Components (`src/components/`)
+- **GlobalModal** (alert/confirm), **SkillTestModal** (manual 2d20 widget), **OracleWidget** (book dice logic + Cheat the Oracle), **DeathModal** (Death questions, Miraculous Escape, epilogue), **LevelUpModal** (perk picker with prerequisite checks), **TutorialOverlay** (route-driven first-visit tips), **dice/DiceRoller** (3D physics d20s).
+
+### Utils (`src/utils/`)
+- `skillTest.ts` (pure 2d20 engine: TN, tag crits, Try-Your-Luck, re-roll-worst-die), `combatEngine.ts` (foe turns as declarative effects; ~25 special abilities; defeat rules; loot), `sound.ts` (Web Audio SFX, respects `soundEnabled`), `storyExport.ts` (Markdown compile).
+
+### Data (`src/data/`)
+All book tables as typed data (see Phase 1 below) plus `codex.ts` (chapters 1–6 from cleaned markdown in `codex/`, **chapter 7 generated at runtime from the typed data** by `codexAppendix.ts` — never edit a chapter7.md, it doesn't exist).
+
+---
+
+## Source Material (`Data/` folder)
+
+The complete "Fallout: Wasteland Wanderer" rulebook lives in the `Data/` folder as extracted markdown. These files are the **single source of truth** for all game rules, tables, and lore. The end goal is for the app to be **completely self-contained**: every table, stat block, perk, action, and lore chapter from these files must exist inside the app — both as functional game data (`src/data/`) and as readable Codex text.
+
+- `Data/1.md` — Chapter 1: Introduction. The three Pip-Boy Sheet tabs, 25-square map setup (central Vault + 4 Impassable squares).
+- `Data/2.md` — Chapter 2: The Wasteland of America. Setting lore: regions, all factions with plot hooks, story themes.
+- `Data/3.md` — Chapter 3: Character Creation. All 7 stages with every sub-table (Vault Experiment, Population, Reputation, Vault Dweller NPC, Known Vaults, G.O.A.T., Skill Items, Goal/Blocker tables) plus Advancement rules.
+- `Data/4.md` — Chapter 4: How to Play. Skill Tests, crits/complications, AP, Truths, The Oracle, Luck Points, Health/Damage/Radiation, Injuries, Death, Miraculous Escape, Combat flow, Combat States.
+- `Data/5.md` — Chapter 5: Telling Your Story. The Round loop (Travel → Encounter → Take Action → Journal), location generation, danger rules, and the full Action stat blocks (Approach, Clear Main Quest Blocker, Complete Side Quest, Endure, Explore, Meet, Rest, Patch Up, Level Up, Find Supplies, Mod/Repair, Scavenge, Trade, Outwit, De-escalate, Oppose, Slaughter, Retreat), journaling guidance and Epilogues.
+- `Data/6.md` — Chapter 6: Quests. The Side Quest pipeline (Reward → Goal → Location).
+- `Data/7.md` — Chapter 7: Appendices. All Perks, Clear Blocker table, every roll table (locations, encounters, combat states, quantity, conditions, modifications, loot, supplies, chems, weapons, armor, oddities, scrap, NPC generation, Dangerous NPCs, side quest rewards + 18 goal-type tables, factions, injuries, Miraculous Escape, reputation), and all ~30 Foe stat blocks (Creatures, Super Mutants, Feral Ghouls, Robots, Raiders, Institute, Brotherhood of Steel, Zetans).
+
+---
+
+## Complete Roadmap
+
+**Strategy: Data first, then engine.** Phase 1 achieves full content parity with the rulebook (all tables transcribed into typed data files + the Codex). Later phases build the automated engine on top of that data. Polish features (tutorial, 3D dice, audio, export) come after parity.
+
+### Phase 1: Full Book-Data Parity (the foundation) — ✅ COMPLETE
+Transcribe **everything** in `Data/*.md` into typed data files under `src/data/`. No simplifications, no truncated tables — every entry matches the book.
+- **Perks** (`perks.ts`): All ~35 perks with Ranks, Requirements (attribute/level prerequisites), and machine-readable effect descriptors.
+- **Complete Bestiary** (`bestiary.ts` rewrite): All ~30 foe stat blocks with exact Threat values, full Aggressive/Cautious/Crafty action ranges, weapon variants, and special abilities (Flight, Small, Burrower, Immunities, Extremely Tough, Charging Laser, Coordinate Fire, Chain That Binds, Meat Shield, suicider detonation, etc.) as structured data.
+- **Complete Loot & Economy tables** (`lootTables.ts` expansion): Full Armor/Ranged/Melee/Thrown tables with item Values, Conditions (full 20-entry table), Modifications (armor + weapon mods with effects), Chems (with values + descriptions), Supplies (20 foods), Caps, Oddities, Scrap (2d20 table), Quantity table, and Ammunition rules.
+- **Complete NPC generation** (`npcTables.ts` rewrite): Full name lists (feminine/masculine/surnames from the book), Age, the dual Odds/Evens Demeanor table, two-roll Distinctive Features, Profession, Secrets, Truths, and the Faction table. Plus the full **Dangerous NPC** system: Threat, faction Special Abilities, Weapons, and Group tables.
+- **Complete Quest system data** (`questTables.ts` rewrite): The full Side Quest pipeline — Reward table (30 entries incl. Mystery re-rolls), Goal Type table (18 categories), all ~180 goals **with their narrative prompt questions**, Location rules, and the full 10-type Main Quest Blocker table (Unknown Location, Guarded, Restricted Area, Locked Down, Irradiated, Mobile, Cost, Hunted, Politics, Split) with their unique mechanics. Plus the Clear Blocker table (level-scaled d20+Level results).
+- **Encounters & Locations** (`encounters.ts` expansion): Inhabitants Generator (settlement spacing rules), Icons, Wasteland/Settlement Truths, full Settlement/Wasteland Encounter tables **with their narrative questions**, Combat States with mechanical effects, Irradiated location rules.
+- **Character systems data** (new files): Injury table (2d20 location + type), Miraculous Escape table, Settlement Reputation table (incl. Vilified/Idolized), Known Vaults list, Foe Type generator + all per-faction Foe Generation tables.
+- **Action definitions** (`actions.ts`): All Pick-a-Path actions as structured data: goal, difficulty, solutions (Attribute + Skill pairs), suggested modifiers, success/failure outcomes, additional successes, potential complications — for Approach, Explore, Meet, Rest, Patch Up, Level Up, Find Supplies, Mod & Repair, Scavenge, Trade, Complete Side Quest, Clear Main Quest Blocker, Outwit, De-escalate, Oppose, Slaughter, Retreat, and the Endure reaction.
+- **In-App Codex** (new tab): A searchable chapter browser containing the cleaned-up full text of all 7 chapters — lore, rules explanations, designer notes, examples, factions, and themes — so the physical book is never needed. Bundle the `Data/*.md` content (cleaned of OCR artifacts) into the app.
+
+### Phase 2: Character Creation — Exact Book Match — ✅ COMPLETE
+Rebuild the creation wizard so all 7 stages match the book precisely, using the Phase 1 data:
+- Stage 1 with all six steps: Experiment, Population, Reputation, **Linked NPC (4 rolls on the Vault Dweller NPC table)**, Vault Number + Region, with **Known Vaults** as pickable presets (Vault 3, 101, 111, etc.).
+- S.P.E.C.I.A.L.: all start at 4, +12 points, max 10, with Balanced/Focused/Specialized presets.
+- Skills: G.O.A.T. roll/pick **or** self-assign (15 + INT ranks, max 5), then +INT bonus ranks for G.O.A.T. path, 2 Tag skills.
+- HP = 5 + END; Luck Points = ⌈LCK/2⌉.
+- Starting equipment: pick two skills with rank 3+, plus 2 Supplies.
+- Character description prompts (name/appearance/personality/motivation) written into the Journal.
+- Main Quest: Goal table, full 10-type Blocker table with unique mechanics, Blocker Location on map edge.
+
+### Phase 3: The Guided Round Engine — ✅ COMPLETE
+Implemented in `src/pages/RoundTab.tsx` (the "Round" tab — the primary play surface), `src/utils/skillTest.ts` (pure 2d20 engine), `src/components/LevelUpModal.tsx` (perk picker with prerequisite checking), and an upgraded `OracleWidget` (book dice logic + Cheat the Oracle). Round/stage/danger state, perks, injuries, NPCs, and side quests live in `gameState.ts`. XP is now spent via Level Up (1 XP = 1 Perk = +1 Level) per the book.
+Make the app drive play as a **fully guided, stage-by-stage round loop** (virtual game master):
+- **Round structure**: The app walks the player through Travel → Encounter → Take Action → Journal each round, with a visible round/stage indicator.
+- **Travel**: Adjacent-only movement (no diagonals), auto-deduct 1 Supply (or lose 2 HP), Impassable squares blocked, auto-generate new locations (Inhabitants → Faction for settlements → Icon → Truth), prompts for "Flesh it Out" questions, Irradiated location radiation automation.
+- **Encounters**: Auto-generate Settlement/Wasteland encounters on arrival, with the encounter's narrative question surfaced as a journal prompt. Auto-generate Foes (Foe Type → faction table), NPCs (full pipeline, +1 XP for new NPCs), Dangerous NPCs, and Blocker Encounters at Blocker Locations.
+- **Danger state**: The app determines Safe vs In Danger and restricts the action list accordingly (Safe Actions vs Dangerous Actions), enforcing rules like "one Scavenge per round" and Trade only in settlements.
+- **Action resolution**: Every action runs through the 2d20 engine with auto-calculated TN, difficulty modifiers from Truths (player toggles applicable ones), AP gain/spend, Additional Success menus, and complication prompts.
+- **Luck Points**: All three spend modes automated — Cheat the Oracle, Play the Odds (table-roll adjust), Try your Luck (LCK as TN with auto crit/complication).
+- **The Oracle**: Quick-access widget available everywhere (Likely / 50-50 / Unlikely with correct dice logic), integrated with Luck Point re-rolls.
+- **Smart Journal**: Round-based entries with in-game date stamps, auto-inserted prompts from encounters/quests/clear-blocker results, `[SYSTEM]` tags, and a guided **Epilogue** flow on death or Main Quest completion.
+- **XP & Leveling**: Auto XP from new NPCs, Side Quests (1 XP), Main Quest blockers (incl. Luck Point awards), Level Up action with full perk picker (prerequisite checking) and automated perk effects (re-rolls, difficulty reductions, healing bonuses, auto-successes) applied by the engine wherever mechanically possible.
+
+### Phase 4: Full Combat & Character-State Automation — ✅ COMPLETE
+Combat engine in `src/utils/combatEngine.ts` (foe turns as declarative effects, ~25 special abilities automated) driven by the rebuilt `CombatTab.tsx` (Oppose/Slaughter/Outwit/De-escalate/Retreat, Endure interrupt, threat-order turns, per-foe loot rules, Combat State automation). Injuries/death/Miraculous Escape in `DeathModal.tsx` + auto 2d20 injury rolls with overkill. RoundTab gained Mobile/Hunted blocker travel rolls, side-quest map markers + completion (+XP/+LP/reputation step), reputation modifiers on social tests, the Trade shop (Value pricing, double-on-failure), and the Mod & Repair workbench (scrap/caps cost, mod/condition operations). Ammo Box redemption fires on Out-of-Ammo complications.
+- **Combat engine**: Alternating turns in Threat order; auto-rolled d20 foe actions resolved from stat-block data including special abilities (spawning, fleeing, burrowing, charging lasers, coordinated fire, detonations, Extremely Tough, Meat Shield, etc.); abstracted range/movement truths; Combat State generation with mechanical effects; Oppose / Slaughter / Outwit / De-escalate / Retreat / Approach all engine-resolved; **Endure reaction** triggered automatically on damage; looting defeated foes (incl. Always Carrying / Shopping Cart rules).
+- **Injuries**: Auto 2d20 injury rolls (location + type, with overkill modifier), injuries tracked as Truths, Patch Up integration, the Death questions surfaced as a guided prompt, and the **Miraculous Escape** table (spend all Luck Points).
+- **Radiation**: Radiation Damage as both HP loss and stacking max-HP-reduction Injury; RadAway/Rad-X/armor interactions.
+- **Reputation**: Per-settlement reputation tracked (Hostile → Cautious → Neutral → Friendly, plus Vilified/Idolized), auto-rolled on first visit, modified by quests, and applied as a modifier in Barter/Speech tests.
+- **Full economy**: Trade action with book pricing math (Value = stacks of caps, condition/mod surcharges, failure pricing), Mod & Repair with scrap/caps costs and pay-an-expert option, ammo as "Out of Ammo" truths with Ammo Box redemption, item conditions/mods with mechanical effects on tests.
+- **Map & quest integration**: Quest markers on the grid for Side Quest locations, Blocker Locations (incl. Mobile blocker movement and Hunted pursuit rolls), and radio-signal/border-town encounter effects.
+
+### Phase 5: Polish & Experience — ✅ COMPLETE
+- **Vault-Tec Onboarding Tutorial**: `TutorialOverlay.tsx` shows a contextual tip the first time each tab is visited (tracked in `seenTutorials`); toggleable in Data → SYS.MGMT.
+- **3D Dice Roller Module**: physics-based d20s (`components/dice/DiceRoller.tsx`, react-three-fiber + cannon) used by the Skill Test and Oracle widgets.
+- **Audio Effects**: `utils/sound.ts` — Web Audio-synthesized SFX (no asset files): geiger bursts on radiation, dice rattle, success/failure chimes, damage thuds, foe-defeat hits, level-up arpeggio, consume gulp, terminal typing ticks. Mute toggle in Data → SYS.MGMT (`soundEnabled`).
+- **Story Export**: `utils/storyExport.ts` compiles character sheet, vault origin, quests, NPCs, explored-map summary, and the full Journal into a downloadable Markdown file (Data → "Export Story").
+
+**ALL ROADMAP PHASES COMPLETE.** The app is fully self-contained: every table, stat block, perk, action, and lore chapter from `Data/*.md` exists as typed game data and readable Codex text, with the guided round loop, full combat engine, and economy built on top.
+
+---
+
+## Post-Roadmap UX & Automation Pass — ✅ DONE
+
+Player-feedback driven improvements after the roadmap (design principle: **automatic and context-sensitive; only ask when a choice genuinely matters**):
+
+- **Self-resolving encounters**: encounter text is parsed for `[FOE]`/`[CREATURE]`/`[RAIDERS]`/`[SUPER MUTANT]`/`[ROBOT]`/`[DANGEROUS NPC]`/`[NPC]`/`[SIDE QUEST]`/`[CHEM]` tokens and everything is generated/saved automatically; scenario text is parsed into real combatants (`parseFoesFromScenario`, plural-aware); the "Are you in Danger?" check pre-answers itself.
+- **Context-filtered actions**: the Action stage only shows actions that are legal/relevant right now (Trade in settlements, Scavenge once per round in wasteland/hostile towns, Patch Up/Rest only when hurt or injured, Meet only with an NPC present, Level Up only with XP). Clear Blocker is a dedicated button at the Blocker square.
+- **Auto-detected modifiers**: irradiated locations, prior scavenging, already-traded, Explore's per-Truth difficulty, settlement reputation on social tests, and the carried `nextTestModifier` all apply themselves (each toggleable off).
+- **Choice-effect interpreter** (`resolveChoiceEffect` in RoundTab): complications and choice outcomes are buttons whose effects actually apply (damage, supplies, injuries via 2d20 roll, foe spawns + danger, loot, truths, ammo-box redemption, weapon break, next-test modifiers). Combat has the same selectable-complication panel.
+- **Auto-pick when obvious**: Patch Up heals when uninjured / treats when at full HP (asks only when both matter); Explore failure auto-spends a Supply before HP; Rest is a one-tap smart heal (settlement = caps first, wasteland = supplies only).
+- **Real quest rewards**: `applyQuestReward` delivers caps/weapons/armor/chems/supplies/XP/reputation/mods/Power Armor; "Information" reveals adjacent unexplored squares; "Nothing…" spawns a revenge quest; Blocker Bypass marks the Main Quest.
+- **Generator toolkit**: Data tab GEN panel (NPC +1 XP, Dangerous NPC, NPC Group, Foes, Side Quest, Combat State, Loot, Chem, Faction, Truth — all persisted + journaled) and on-demand **settlement/wasteland generation or conversion on any non-impassable map square** (for Restricted Area / Politics blockers etc.).
+- **Flow fixes**: combat auto-returns to the Round (Retreat → Journal stage), creation stages auto-advance when complete, best-skill/best-weapon pre-selection with TNs shown, dice timing ~2.5× faster, Codex fully de-OCR'd (no page references anywhere; ch.7 generated from data).
+
+**Known intentional behaviors**: Hard Reset resets in-memory state before clearing storage (race-proof); manual NPC generation grants the book's +1 XP; complications remain a player choice by design.

@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pipboy-green: #14FF00;
+  --color-pipboy-dark: #051A05;
+  --color-pipboy-amber: #FFB000;
+  --font-sans: 'VT323', monospace;
+
+  /* Increased all font sizes by exactly 3px from Tailwind defaults */
+  --text-xs: 15px;
+  --text-sm: 17px;
+  --text-base: 19px;
+  --text-lg: 21px;
+  --text-xl: 23px;
+  --text-2xl: 27px;
+  --text-3xl: 33px;
+  --text-4xl: 39px;
+}
+
+@layer base {
+  body {
+    background-color: #000;
+    color: var(--color-pipboy-green);
+    font-family: 'VT323', monospace, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+}
+
+.crt-overlay {
+  pointer-events: none;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 50;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.10) 50% /* Toned down from 0.25 to 0.10 */
+  ), linear-gradient(
+    90deg, 
+    rgba(255, 0, 0, 0.03), /* Toned down RGB separation */
+    rgba(0, 255, 0, 0.01), 
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 3px 100%;
+}
+
+.crt-flicker {
+  animation: flicker 0.15s infinite;
+}
+
+@keyframes flicker {
+  0% { opacity: 0.98; }
+  100% { opacity: 1; }
+}
+
+/* Custom Scrollbar for Pip-Boy */
+::-webkit-scrollbar, .custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track, .custom-scrollbar::-webkit-scrollbar-track {
+  background: #051A05; 
+  border-left: 1px solid var(--color-pipboy-green);
+}
+::-webkit-scrollbar-thumb, .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-pipboy-green); 
+}
+::-webkit-scrollbar-corner {
+  background: #051A05;
+}
