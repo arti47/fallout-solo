@@ -55,7 +55,8 @@ export default function CharacterCreation() {
         ''
       ].filter((l): l is string => l !== null);
       return {
-        supplies: state.supplies + 2,
+        // Book rule (pg.69): creation grants exactly 2 Supplies.
+        supplies: 2,
         journalText: lines.join('\n')
       };
     });
