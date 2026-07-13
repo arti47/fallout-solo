@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useGameState } from '../store/gameState';
 import type { Special } from '../store/gameState';
-import { useUIState } from '../store/uiState';
 import DiceRoller from './dice/DiceRoller';
 import { Dices } from 'lucide-react';
 import { sfx } from '../utils/sound';
@@ -18,18 +17,18 @@ export default function SkillTestModal() {
   } | null>(null);
   const [journalNote, setJournalNote] = useState("");
 
-  const { special, skills, ap, updateAp, appendJournal } = useGameState();
-  const { showAlert } = useUIState();
+  const { special, skills, appendJournal } = useGameState();
 
   const [selectedAttr, setSelectedAttr] = useState<keyof Special>('S');
   const [selectedSkill, setSelectedSkill] = useState<string>('Athletics');
   const [difficulty, setDifficulty] = useState<number>(1);
-  const [extraDice, setExtraDice] = useState<number>(0);
 
   const skillObj = skills.find(s => s.name === selectedSkill) || skills[0];
   const targetNumber = special[selectedAttr] + (skillObj?.rank || 0);
   const criticalThreshold = skillObj?.isTag ? (skillObj.rank || 1) : 1;
-  const totalDice = 2 + extraDice;
+  // Skill Tests are always 2d20 (pg.85). AP is spent on re-rolls / Additional
+  // Successes, never to add dice.
+  const totalDice = 2;
 
   const handleRollComplete = (results: number[]) => {
     setIsRolling(false);
@@ -42,8 +41,9 @@ export default function SkillTestModal() {
         successes += 2; // Critical success grants 2 successes
       } else if (r <= targetNumber) {
         successes += 1; // Standard success
-      } else if (r === 20) {
-        complications += 1; // Complication
+      }
+      if (r === 20) {
+        complications += 1; // A Natural 20 is always a Complication
       }
     });
 
@@ -61,19 +61,11 @@ export default function SkillTestModal() {
     });
     
     // Reset modal inputs
-    setExtraDice(0);
     setDifficulty(1);
     setJournalNote("");
   };
 
   const handleInitiate = () => {
-    if (extraDice > 0) {
-      if (ap < extraDice) {
-        showAlert("Not enough AP!");
-        return;
-      }
-      updateAp(-extraDice);
-    }
     setIsRolling(true);
   };
 
@@ -157,15 +149,6 @@ export default function SkillTestModal() {
                   <button onClick={() => setDifficulty(Math.max(0, difficulty - 1))} className="w-8 h-8 border border-[#14FF00] hover:bg-[#14FF00] hover:text-black">-</button>
                   <span className="w-4 text-center">{difficulty}</span>
                   <button onClick={() => setDifficulty(difficulty + 1)} className="w-8 h-8 border border-[#14FF00] hover:bg-[#14FF00] hover:text-black">+</button>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center border border-[#14FF00] p-2">
-                <span className="opacity-80">BUY DICE (1 AP/EA)</span>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setExtraDice(Math.max(0, extraDice - 1))} className="w-8 h-8 border border-[#14FF00] hover:bg-[#14FF00] hover:text-black">-</button>
-                  <span className="w-4 text-center">{extraDice}</span>
-                  <button onClick={() => setExtraDice(Math.min(3, extraDice + 1))} className="w-8 h-8 border border-[#14FF00] hover:bg-[#14FF00] hover:text-black">+</button>
                 </div>
               </div>
 
