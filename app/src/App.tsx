@@ -26,7 +26,7 @@ function App() {
   return (
     <>
       <GlobalModal />
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
         <Route path="/" element={<Navigate to="/stats" replace />} />
         
