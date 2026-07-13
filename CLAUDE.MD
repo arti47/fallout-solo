@@ -164,3 +164,16 @@ Deviations found and fixed:
 - **SPECIAL base** — default Attributes were 5; the book starts each at 4 before the +12 buy. Default set to 4s so Step 2 begins from the book baseline (the final 12-point spread was already enforced).
 
 Known remaining simplification (by design, not yet changed): starting Skill-Item gear is stored as type `Equipment`, so a starting weapon/armor isn't auto-classified as Weapon/Armor — combat is skill-driven so this doesn't affect resolution.
+
+---
+
+## Chapter 4 (How to Play) Rules Audit — ✅ DONE
+
+Line-by-line audit of the skill-test engine, Luck/AP, the Oracle, and combat against Chapter 4. Verified correct: TN = Skill Rank + Governing Attribute; 2d20 with each die ≤ TN a Success; pass when Successes ≥ Difficulty; Critical Success on Natural 1 or a Tagged roll ≤ Skill Rank (one crit per die); AP gained on excess Successes and capped at Agility; Additional-Success AP spends; Try-Your-Luck (TN = Luck); the Oracle (Likely 1d20 6+, 50/50 low die 11+, Unlikely high die 16+) and Cheat-the-Oracle; combat flow (player acts → one foe acts in Threat order); Oppose Difficulty = Threat, success = defeat, failure = Threat −1 (min 1); Damage → HP loss; Radiation → HP loss + stacking max-HP injury; injuries on 0 HP with overkill added to the roll.
+
+Deviations found and fixed:
+- **AP could buy extra d20s** — not a rule. Chapter 4 allows spending AP only to re-roll a die or buy an Additional Success. Removed the "spend AP for extra dice" control everywhere (`RoundTab` ActionResolver, `CombatView`, `SkillTestModal`); Skill Tests are always 2d20. (This reverses the earlier combat-redesign choice, per an explicit follow-up decision to enforce strict RAW.)
+- **"In Cover" blocked ranged attacks** — corrected to the Oppose modifier: a target in cover is +1 Difficulty to ranged, not impossible (`CombatView`).
+- **Natural 20 at very high TN** — a 20 now always registers a Complication even when it also counts as a Success (`skillTest.ts`, `SkillTestModal`).
+
+Known minor deviations (flagged, not changed): foe Threat ties aren't randomized with a d20; the AP re-roll auto-picks the worst die and is only offered after a failed test (book lets you pick any die before resolving); loot applies at the moment of defeat rather than once you're no longer In Danger; combat Oppose doesn't surface its Additional-Success spends (reduce a nearby foe's Threat, choose who acts next, explosive multi-defeat); "Play the Odds" is an encounter re-roll rather than a ±Luck adjust to an arbitrary table roll.

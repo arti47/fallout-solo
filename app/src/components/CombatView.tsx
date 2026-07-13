@@ -104,8 +104,7 @@ export default function CombatView({ onExit }: CombatViewProps) {
   const [logOpen, setLogOpen] = useState(false);
   const [flashFoeId, setFlashFoeId] = useState<string | null>(null);
   const [playerHurt, setPlayerHurt] = useState(false);
-  // Pre-roll boosts.
-  const [extraDice, setExtraDice] = useState(0);
+  // Pre-roll boost: Try Your Luck (AP re-roll is offered after the roll).
   const [tryLuck, setTryLuck] = useState(false);
   // End-of-fight summary.
   const [endState, setEndState] = useState<{ kind: EndKind; toStage: 'action' | 'journal' } | null>(null);
@@ -415,12 +414,7 @@ export default function CombatView({ onExit }: CombatViewProps) {
       difficulty = Math.max(0, difficulty - 1);
     }
 
-    // Consume pre-roll boosts (only once the action is legal).
-    let dice = 0;
-    if (extraDice > 0 && ap >= extraDice) {
-      dice = extraDice;
-      updateAp(-extraDice);
-    }
+    // Try Your Luck (1 LP) is the only pre-roll spend; AP re-roll comes after.
     let usingLuck = false;
     if (tryLuck && luck >= 1) {
       usingLuck = true;
@@ -430,10 +424,9 @@ export default function CombatView({ onExit }: CombatViewProps) {
     sfx.diceRoll();
     const outcome = runSkillTest(
       special, skills,
-      { attribute: sol.attr, skillName: sol.skill, difficulty, extraDice: dice, tryLuck: usingLuck },
+      { attribute: sol.attr, skillName: sol.skill, difficulty, tryLuck: usingLuck },
       special.L
     );
-    setExtraDice(0);
     setTryLuck(false);
     setPendingRoll({ outcome, action, targetId, sol, difficulty, rerolled: false });
     setPhase('reveal');
@@ -734,18 +727,13 @@ export default function CombatView({ onExit }: CombatViewProps) {
             </div>
           )}
 
-          {/* Pre-roll boosts */}
-          <div className="flex items-center justify-between gap-2 border-y border-[#14FF00]/30 py-2 text-[11px] normal-case">
+          {/* Pre-roll boost: Try Your Luck (1 LP). AP is spent only on the
+              post-roll re-roll or on Additional Successes, per the rules. */}
+          <div className="flex items-center gap-2 border-y border-[#14FF00]/30 py-2 text-[11px] normal-case">
             <label className={`flex items-center gap-1 ${luck < 1 ? 'opacity-30' : ''}`}>
               <input type="checkbox" checked={tryLuck} disabled={luck < 1} onChange={e => setTryLuck(e.target.checked)} />
-              Try Luck (1 LP)
+              Try Your Luck (1 LP — roll vs Luck {special.L})
             </label>
-            <span className="flex items-center gap-1">
-              +Dice ({ap} AP)
-              <button onClick={() => setExtraDice(Math.max(0, extraDice - 1))} className="border border-[#14FF00] w-6 h-6 leading-none">-</button>
-              <span className="w-4 text-center font-bold">{extraDice}</span>
-              <button onClick={() => setExtraDice(Math.min(Math.min(3, ap), extraDice + 1))} className="border border-[#14FF00] w-6 h-6 leading-none">+</button>
-            </span>
           </div>
 
           {/* Commit button (all modes except single-target Attack, which is tap-a-foe) */}

@@ -77,7 +77,6 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
   });
   const [activeModifiers, setActiveModifiers] = useState<number[]>([]);
   const [tryLuck, setTryLuck] = useState(false);
-  const [extraDice, setExtraDice] = useState(0);
   const [outcome, setOutcome] = useState<TestOutcome | null>(null);
   const [rerolled, setRerolled] = useState(false);
   const [bonusNotes, setBonusNotes] = useState<string[]>([]);
@@ -393,17 +392,12 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
       if (luck < 1) return;
       updateLuck(-1);
     }
-    if (extraDice > 0) {
-      if (ap < extraDice) return;
-      updateAp(-extraDice);
-    }
     // The carried modifier applies to this one test only.
     if (nextTestModifier !== 0) setNextTestModifier(0);
     const result = runSkillTest(special, skills, {
       attribute: attrKeyMap[solution?.attribute ?? 'STR'] ?? 'S',
       skillName: solution?.skill ?? 'Athletics',
       difficulty,
-      extraDice,
       tryLuck
     }, special.L);
     if (result.passed) sfx.success(); else sfx.failure();
@@ -761,18 +755,12 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
           <input type="checkbox" checked={tryLuck} disabled={luck < 1} onChange={e => setTryLuck(e.target.checked)} />
           Try Your Luck (1 LP, TN={special.L})
         </label>
-        <span className="flex items-center gap-2 text-xs">
-          +Dice ({ap} AP):
-          <button onClick={() => setExtraDice(Math.max(0, extraDice - 1))} className="border border-[#14FF00] w-5">-</button>
-          {extraDice}
-          <button onClick={() => setExtraDice(Math.min(Math.min(3, ap), extraDice + 1))} className="border border-[#14FF00] w-5">+</button>
-        </span>
       </div>
 
       <div className="flex gap-2">
         <button onClick={onDone} className="flex-1 border border-[#14FF00] p-2 hover:bg-[#14FF00] hover:text-black">Cancel</button>
         <button onClick={roll} className="flex-1 border-2 border-[#14FF00] p-2 font-bold bg-black hover:bg-[#14FF00] hover:text-black animate-pulse flex items-center justify-center gap-2">
-          <Dices size={16} /> Roll {2 + extraDice}d20
+          <Dices size={16} /> Roll 2d20
         </button>
       </div>
     </div>
