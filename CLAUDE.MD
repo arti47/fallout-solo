@@ -177,3 +177,20 @@ Deviations found and fixed:
 - **Natural 20 at very high TN** — a 20 now always registers a Complication even when it also counts as a Success (`skillTest.ts`, `SkillTestModal`).
 
 Known minor deviations (flagged, not changed): foe Threat ties aren't randomized with a d20; the AP re-roll auto-picks the worst die and is only offered after a failed test (book lets you pick any die before resolving); loot applies at the moment of defeat rather than once you're no longer In Danger; combat Oppose doesn't surface its Additional-Success spends (reduce a nearby foe's Threat, choose who acts next, explosive multi-defeat); "Play the Odds" is an encounter re-roll rather than a ±Luck adjust to an arbitrary table roll.
+
+---
+
+## Chapter 5 (Telling Your Story) Rules Audit — ✅ DONE
+
+Audit of the Round engine (`RoundTab.tsx`), the Action stat blocks (`actions.ts`), and encounter/location generation (`encounters.ts`) against Chapter 5. **`actions.ts` is faithful** — every Action's Difficulty, Solutions (attribute + skill, incl. off-attribute combos like PER Survival for Scavenge and END Big Guns for Oppose), Modifiers, Success/Failure, Additional Successes, and Complications match the book. Round flow (Travel → Encounter → Take Action → Journal), orthogonal adjacency, 1-Supply/-2-HP travel cost, Impassable squares, inhabitant/icon/truth generation, explored-vs-unexplored handling, encounter tables + journal prompts, Blocker Encounters, Safe-vs-Dangerous action gating, Rest/Trade/Find Supplies/Patch Up/Level Up all verified correct.
+
+Deviations found and fixed:
+- **Meet fabricated a new NPC** and wrongly awarded the "new face" +1 XP each time. Corrected: Meet now visits an existing NPC at the Location, learns a Secret, and attaches the Side Quest to that giver — no new NPC, no bonus XP.
+- **Endure + Heavy Armor** could still be reduced to 0 HP. Corrected: a successful Endure in Heavy (non-Power) Armor now cannot drop you below 1 HP (`CombatView`).
+
+Known deviations still open (need a design decision — several stem from combat having two resolution paths: the inline `CombatView` and the Round `ActionResolver`):
+- **Dangerous actions resolved via the Round `ActionResolver`** (Talk Down / Outwit / Flee opened from the encounter) set danger off on success but don't apply the book's failure consequences (De-escalate = two foes act; Slaughter = suffer the shortfall; Outwit = foes activate; Retreat = all foes act). The full consequences exist only in `CombatView`. De-escalate failure in `CombatView` also currently runs one foe, not two.
+- **Scavenge failure** doesn't auto-spawn the protecting Foe / Combat State.
+- **Modify & Repair failure** doesn't apply the Broken condition (item is chosen after success in the workbench flow, so there's no target on failure).
+- **Pay a Doctor / Pay an Expert** ("Special" solutions) don't auto-succeed for Caps — selecting them would mis-roll.
+- **Irradiated locations** only apply +1 Rad on travel-in; the book also charges Rad on travel-out, encounter start/finish, and after each Safe Action there.

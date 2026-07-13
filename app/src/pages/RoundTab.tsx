@@ -319,15 +319,19 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
         break;
       }
       case 'Meet': {
-        const npc = generateFullNpc();
-        addNpc({ name: npc.name, description: `${npc.demeanor} ${npc.profession} — Secret: ${npc.secret}`, location: currentSector });
+        // Book (pg.129): Meet visits a KNOWN NPC already in your Location —
+        // learn their Secret and get a Side Quest from them. It does NOT create
+        // a new NPC (so it grants no "new face" +1 XP).
+        const here = useGameState.getState().npcs.filter(n => n.location === currentSector);
+        const giver = here[0];
+        const secret = generateFullNpc().secret;
         const quest = generateSideQuest(currentSector);
         addSideQuest({
           goalType: quest.goalType, goal: quest.goal, questions: quest.questions,
           reward: quest.rewardName, rewardDesc: quest.rewardDescription,
-          location: quest.location, giver: npc.name, status: 'Active'
+          location: quest.location, giver: giver?.name, status: 'Active'
         });
-        notes.push(`${npc.name} shares their secret: ${npc.secret}`);
+        notes.push(`${giver?.name ?? 'The NPC'} shares a secret: ${secret}`);
         notes.push(`New Side Quest [${quest.goalType}]: ${quest.goal} (Location ${quest.location}, Reward: ${quest.rewardName})`);
         notes.push(`Prompt: ${quest.questions}`);
         break;
