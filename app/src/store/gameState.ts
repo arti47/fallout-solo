@@ -226,6 +226,7 @@ const initialSkills: Skill[] = [
   { name: 'Sneak', rank: 0, isTag: false },
   { name: 'Speech', rank: 0, isTag: false },
   { name: 'Survival', rank: 0, isTag: false },
+  { name: 'Throwing', rank: 0, isTag: false },
   { name: 'Unarmed', rank: 0, isTag: false },
 ];
 
@@ -238,7 +239,8 @@ export const getInitialGameData = () => ({
   motivation: '',
   level: 1,
   xp: 0,
-  special: { S: 5, P: 5, E: 5, C: 5, I: 5, A: 5, L: 5 },
+  // Book rule (pg.61): every Attribute starts at 4; creation distributes +12.
+  special: { S: 4, P: 4, E: 4, C: 4, I: 4, A: 4, L: 4 },
   skills: initialSkills.map(s => ({ ...s })),
   hp: 10,
   maxHp: 10,
@@ -249,7 +251,8 @@ export const getInitialGameData = () => ({
   rads: 0,
 
   caps: 0,
-  supplies: 5,
+  // Book rule (pg.69): character creation grants exactly 2 starting Supplies.
+  supplies: 2,
   // Book rule (Stage 5): starting equipment comes from two chosen skills
   // with rank 3+, plus 2 Supplies. The Vault Suit is the clothes on your back.
   gear: [

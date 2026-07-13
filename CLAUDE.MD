@@ -150,3 +150,17 @@ Reworked the encounter and combat experience into a single guided, fewer-tap flo
 - **Readability**: larger base fonts and tap targets throughout the new components while keeping the Pip-Boy/CRT aesthetic. Verified in a headless-Chromium smoke test (seed character → attack → dice reveal → foe turn) with no runtime errors.
 
 Audience target for this pass: newcomer-friendly and works on phone + desktop.
+
+---
+
+## Chapter 3 (Character Creation) Rules Audit — ✅ DONE
+
+Full line-by-line audit of the creation flow against the Chapter 3 rulebook text. Verified correct: Population/Reputation ranges + sole-survivor skip, Linked-NPC 4-column rolls and all four NPC sub-tables, Vault Number 1-122, all 32 Known Vaults (numbers/truths/regions), the full 20-row G.O.A.T. table with ranks, the 17-entry Skill Item Table, 15+INT / INT-bonus skill pools with the 5-rank cap and exactly 2 Tags, HP = 5+END, Luck = ⌈LCK/2⌉, Level 1, AP = 0 capped by AGI, the 20-entry Goal table, all 10 Blocker types with correct ranges, outer-edge Blocker Location, and the Unknown-Location skip.
+
+Deviations found and fixed:
+- **Missing `Throwing` skill** — the skill list had 16 of the book's 17 skills; added `Throwing` (AGI) to `initialSkills` (`gameState.ts`). Previously G.O.A.T. Throwing ranks were dropped and combat "Thrown Weapon" always resolved at rank 0.
+- **Vault Experiment Truths misaligned** for rolls 6/7/8/12 (`creationTables.ts`) — corrected to the book: AI = Cameras/Security turrets; Military Perfection = Spotless/Disciplined residents; Pharmaceutical Trials = Laboratories/Test subject cells; Calvinist Reversal = Communist ideals/Degeneration.
+- **Starting Supplies** — creation granted 7 (default 5 + 2); the book grants exactly 2. Default `supplies` set to 2 and `handleFinish` sets it absolutely.
+- **SPECIAL base** — default Attributes were 5; the book starts each at 4 before the +12 buy. Default set to 4s so Step 2 begins from the book baseline (the final 12-point spread was already enforced).
+
+Known remaining simplification (by design, not yet changed): starting Skill-Item gear is stored as type `Equipment`, so a starting weapon/armor isn't auto-classified as Weapon/Armor — combat is skill-driven so this doesn't affect resolution.
