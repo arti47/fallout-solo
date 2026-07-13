@@ -152,6 +152,15 @@ export default function CombatView({ onExit }: CombatViewProps) {
     if (amount <= 0) return;
 
     const hpBefore = hp;
+    // Endure + Heavy (non-Power) Armor: the hit cannot drop you to 0 HP (pg.126).
+    if (endured && isHeavyArmor && !isPowerArmor) {
+      const survivable = Math.max(0, hpBefore - 1);
+      if (amount > survivable) {
+        amount = survivable;
+        addCombatLog('Your Heavy Armor holds — the blow cannot drop you below 1 HP.');
+      }
+      if (amount <= 0) return;
+    }
     if (dmg.type === 'Radiation') {
       updateRads(1);
       sfx.geiger(3);
