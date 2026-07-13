@@ -81,6 +81,8 @@ export interface TrackedSideQuest {
   location: number;
   giver?: string;
   status: 'Active' | 'Completed' | 'Abandoned';
+  /** True once the reward has been renegotiated (LP re-roll or Barter test). */
+  renegotiated?: boolean;
 }
 
 /** The four stages of a Round (Chapter 5). */

@@ -12,7 +12,7 @@ import type { FoeTemplate } from '../data/bestiary';
 import { rollFaction, generateFullNpc, generateDangerousNpc } from '../data/npcTables';
 import { generateFoeEncounter, rollSettlementReputation, shiftReputation, rollInjury } from '../data/characterTables';
 import type { Reputation, FoeType } from '../data/characterTables';
-import { generateSideQuest, rollClearBlocker, rollMainQuestBlocker } from '../data/questTables';
+import { generateSideQuest, rollClearBlocker, rollMainQuestBlocker, rollQuestReward } from '../data/questTables';
 import { rollScavenge, rollQuantity, rollCondition, rollArmorMod, rollWeaponMod, rollChem, rollWeapon, rollArmor } from '../data/lootTables';
 import { ACTIONS } from '../data/actions';
 import type { GameAction } from '../data/actions';
@@ -1389,6 +1389,40 @@ export default function RoundTab() {
     });
   };
 
+  // Reward renegotiation (pg.146): if the offered Reward doesn't fit the Goal,
+  // spend a Luck Point to re-roll it, or attempt a CHA (Barter) diff-2 test.
+  // One attempt per quest, either way.
+  const renegotiateReward = (index: number, method: 'luck' | 'barter') => {
+    const q = sideQuests[index];
+    if (!q || q.status !== 'Active' || q.renegotiated) return;
+    const applyNew = () => {
+      const nr = rollQuestReward();
+      useGameState.setState(s => ({
+        sideQuests: s.sideQuests.map((sq, i) =>
+          i === index ? { ...sq, reward: nr.name, rewardDesc: nr.description, renegotiated: true } : sq)
+      }));
+      appendJournal(`Renegotiated Side Quest reward → ${nr.name}: ${nr.description}`);
+      showAlert(`New reward: ${nr.name}\n${nr.description}`);
+    };
+    if (method === 'luck') {
+      if (luck < 1) return;
+      updateLuck(-1);
+      applyNew();
+    } else {
+      const { special, skills } = useGameState.getState();
+      const outcome = runSkillTest(special, skills, { attribute: 'C', skillName: 'Barter', difficulty: 2 }, special.L);
+      appendJournal(`Renegotiate (Barter, diff 2): rolled ${outcome.rolls.join(', ')} → ${outcome.passed ? 'SUCCESS' : 'FAILURE'}`);
+      if (outcome.passed) {
+        applyNew();
+      } else {
+        useGameState.setState(s => ({
+          sideQuests: s.sideQuests.map((sq, i) => i === index ? { ...sq, renegotiated: true } : sq)
+        }));
+        showAlert('The NPC holds firm — the reward stands.');
+      }
+    }
+  };
+
   // Complete Side Quest (pg.125): reward applied for real + 1 XP + 1 Luck
   // Point, and the settlement remembers your help (Reputation +1 step).
   const completeSideQuest = (index: number) => {
@@ -1708,17 +1742,33 @@ export default function RoundTab() {
                 <div className="border border-amber-400/60 p-2 space-y-1">
                   <div className="text-xs font-bold text-amber-400">ACTIVE SIDE QUESTS:</div>
                   {sideQuests.map((q, i) => q.status === 'Active' && (
-                    <div key={i} className="flex justify-between items-center gap-2 text-xs normal-case border-b border-amber-400/20 pb-1">
-                      <span>
-                        <span className="text-amber-400">[Sq.{q.location}]</span> {q.goal}
-                        <span className="opacity-60"> — {q.reward}{q.giver ? ` (for ${q.giver})` : ''}</span>
-                      </span>
-                      <button
-                        onClick={() => completeSideQuest(i)}
-                        className="border border-amber-400 text-amber-400 px-2 py-0.5 shrink-0 hover:bg-amber-400 hover:text-black uppercase"
-                      >
-                        Complete
-                      </button>
+                    <div key={i} className="text-xs normal-case border-b border-amber-400/20 pb-1.5 space-y-1">
+                      <div className="flex justify-between items-start gap-2">
+                        <span>
+                          <span className="text-amber-400">[Sq.{q.location}]</span> {q.goal}
+                          <span className="opacity-60"> — {q.reward}{q.giver ? ` (for ${q.giver})` : ''}</span>
+                        </span>
+                        <button
+                          onClick={() => completeSideQuest(i)}
+                          className="border border-amber-400 text-amber-400 px-2 py-0.5 shrink-0 hover:bg-amber-400 hover:text-black uppercase"
+                        >
+                          Complete
+                        </button>
+                      </div>
+                      {!q.renegotiated && (
+                        <div className="flex items-center gap-1 opacity-80">
+                          <span className="opacity-60">Reward not fitting?</span>
+                          <button
+                            onClick={() => renegotiateReward(i, 'luck')}
+                            disabled={luck < 1}
+                            className="border border-amber-400/60 text-amber-400 px-1.5 py-0.5 hover:bg-amber-400 hover:text-black disabled:opacity-30 uppercase"
+                          >⟳ 1 LP</button>
+                          <button
+                            onClick={() => renegotiateReward(i, 'barter')}
+                            className="border border-amber-400/60 text-amber-400 px-1.5 py-0.5 hover:bg-amber-400 hover:text-black uppercase"
+                          >⟳ Barter (diff 2)</button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
