@@ -196,3 +196,16 @@ Second-pass fixes (all four selected open items resolved):
 - **Irradiated locations** now charge 1 Rad on travel out, at encounter start and finish, and after each Safe-Action test (in addition to travel in).
 
 Still-open minor item: the "after any Safe Action" irradiation fires after *tested* safe actions; no-test safe actions (Rest, Level Up) don't trigger it.
+
+---
+
+## Chapter 6 (Quests) Rules Audit — ✅ DONE
+
+Audit of the Side Quest pipeline (`questTables.ts`, `generateSideQuest`) against Chapter 6. **Faithful**: Step 1 Reward (d20 with the Mystery 1-10 → re-roll +10), Step 2 Goal (d20 Goal Type with 19-20 = choose any, then d20 on that type's Goal table — all 18 Goal Types present with full 10-range goal lists and their narrative prompt questions), Step 3 Location (d20 1-20, re-roll if it lands on your current location). Complete Side Quest (reward + Secret + 1 XP + 1 LP + reputation step) verified in Chapter 5.
+
+Deviation found and fixed:
+- **Reward renegotiation** (pg.146) was missing. Added a per-quest control on the Active Side Quests panel: if the offered reward doesn't fit, spend **1 Luck Point to re-roll** it, or attempt a **CHA (Barter) difficulty-2** test to renegotiate (success re-rolls; one attempt per quest, tracked by a new `renegotiated` flag).
+
+Minor note: side quests generated from encounter `[SIDE QUEST]` tokens don't always record a `giver` name (Meet does).
+
+Note: the actual Reward / Goal-Type / Goal table *contents* live in the Chapter 7 appendix and will be cross-checked when that chapter is audited.
