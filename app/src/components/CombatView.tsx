@@ -377,8 +377,9 @@ export default function CombatView({ onExit }: CombatViewProps) {
     if (action === 'Oppose') {
       difficulty = target.currentThreat;
       if (target.buffs.includes('In Cover') && isRangedSolution(sol)) {
-        addCombatLog(`${target.template.name} is in cover — it cannot be Opposed by Ranged Weapons this turn!`);
-        return;
+        // Oppose modifier (pg.98): a target in cover is +1 Difficulty.
+        difficulty += 1;
+        addCombatLog(`${target.template.name} is in cover: +1 Difficulty to your ranged attack.`);
       }
       if (target.buffs.includes('Burrowed') && sol.skill !== 'Explosives') {
         difficulty += 2;

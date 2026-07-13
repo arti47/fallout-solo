@@ -51,12 +51,13 @@ export const evaluateRolls = (
       // Trying your Luck: under TN = Critical Success; over = Complication.
       if (r <= targetNumber) successes += 2;
       else complications += 1;
-    } else if (r <= critThreshold) {
-      successes += 2;
-    } else if (r <= targetNumber) {
-      successes += 1;
-    } else if (r === 20) {
-      complications += 1;
+    } else {
+      // A Natural 1 (or a Tagged roll <= Skill Rank) crits; a Natural 20 is
+      // always a Complication (pg.86) even when it also counts as a Success
+      // at a very high Target Number.
+      if (r <= critThreshold) successes += 2;
+      else if (r <= targetNumber) successes += 1;
+      if (r === 20) complications += 1;
     }
   }
   const passed = successes >= difficulty;
