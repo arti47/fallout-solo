@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useGameState } from '../store/gameState';
 import type { Special, EncounterInfo, GearItem } from '../store/gameState';
 import { useUIState } from '../store/uiState';
@@ -20,8 +19,9 @@ import type { GameAction } from '../data/actions';
 import { runSkillTest, rerollWorstDie } from '../utils/skillTest';
 import type { TestOutcome } from '../utils/skillTest';
 import LevelUpModal from '../components/LevelUpModal';
+import CombatView from '../components/CombatView';
 import { sfx } from '../utils/sound';
-import { Footprints, Zap, Swords, Book, ChevronRight, Dices } from 'lucide-react';
+import { Footprints, Zap, Swords, Book, ChevronRight, Dices, MessageCircle, Brain, Wind, PlusCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 const IMPASSABLE = [3, 8, 21, 24];
 const EDGE_SQUARES = [1, 2, 4, 5, 6, 10, 11, 15, 16, 20, 22, 23, 25];
@@ -789,10 +789,9 @@ export default function RoundTab() {
     setStage, setDanger, setEncounter, completeRound, setCurrentSector,
     updateSectorData, updateSupplies, updateHp, updateRads, updateLuck, updateXp,
     appendJournal, setMainQuest, level, setSideQuestStatus,
-    startCombat, setCombatState, updateCaps, addGear
+    startCombat, setCombatState, updateCaps, addGear, combatActive
   } = useGameState();
   const { showAlert } = useUIState();
-  const navigate = useNavigate();
 
   const [selectedSquare, setSelectedSquare] = useState<number | null>(null);
   const [dangerChecks, setDangerChecks] = useState<boolean[]>([false, false, false]);
@@ -802,6 +801,10 @@ export default function RoundTab() {
   const [extras, setExtras] = useState<string[]>([]);
   /** Foes rolled for this encounter, ready to fight. */
   const [encounterFoes, setEncounterFoes] = useState<FoeTemplate[]>([]);
+  /** Encounter "Add to scene" GM-tools menu open state. */
+  const [sceneMenuOpen, setSceneMenuOpen] = useState(false);
+  /** Player override of the auto-detected danger verdict (null = use auto). */
+  const [dangerOverride, setDangerOverride] = useState<boolean | null>(null);
 
   const sector = sectorData[currentSector];
   const isSettlement = !!sector?.isSettlement;
@@ -1023,6 +1026,8 @@ export default function RoundTab() {
       setEncounter(enc);
       appendJournal(`Encounter — ${enc.title}: ${enc.description}`);
       autoPopulate(enc);
+      setDangerOverride(null);
+      setSceneMenuOpen(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, currentEncounter]);
@@ -1034,6 +1039,7 @@ export default function RoundTab() {
     setEncounter(enc);
     appendJournal(`Played the Odds (1 LP) — new Encounter: ${enc.title}`);
     autoPopulate(enc);
+    setDangerOverride(null);
   };
 
   const addFoes = () => {
@@ -1054,7 +1060,17 @@ export default function RoundTab() {
     setDanger(true);
     setEncounterFoes([]);
     appendJournal(`Combat begins! (${foes.map(f => f.name).join(', ')}) — Combat State: ${state.name}`);
-    navigate('/combat');
+  };
+
+  /** Resolve the danger a non-violent way: jump to the Action stage with the
+   *  chosen dangerous action already open. */
+  const enterDangerAction = (name: string) => {
+    setDanger(true);
+    setDangerChecks([false, false, false]);
+    setExtras([]);
+    setStage('action');
+    const act = ACTIONS.find(a => a.name === name);
+    if (act) setActiveAction(act);
   };
 
   const addNpcToScene = () => {
@@ -1309,6 +1325,20 @@ export default function RoundTab() {
   };
 
   // =================== RENDER ===================
+  // A fight in progress takes over the Round page — resolved in place, no
+  // tab-hop. On exit CombatView returns us to the right stage.
+  if (combatActive) {
+    return (
+      <div className="flex flex-col gap-4 pb-8">
+        <div className="border-b-2 border-[#14FF00] pb-2 flex justify-between items-baseline uppercase">
+          <h2 className="text-xl font-bold tracking-widest">ROUND {round}</h2>
+          <span className="text-sm opacity-70">Square {currentSector}</span>
+        </div>
+        <CombatView onExit={(toStage) => setStage(toStage)} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 uppercase pb-8">
       {/* Round header + stage tracker */}
@@ -1410,6 +1440,8 @@ export default function RoundTab() {
       )}
       {stage === 'encounter' && currentEncounter && (() => {
         const enc = currentEncounter;
+        const autoDanger = dangerChecks[0];
+        const danger = dangerOverride ?? autoDanger;
         return (
           <div className="space-y-3">
             <div className={`border-2 p-3 space-y-2 ${enc.type === 'blocker' ? 'border-red-500' : 'border-[#14FF00]'} bg-[#051a05]`}>
@@ -1426,50 +1458,75 @@ export default function RoundTab() {
               <div key={i} className="border border-[#14FF00]/60 p-2 text-xs normal-case bg-[#051a05]">{e}</div>
             ))}
 
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={playTheOdds} disabled={luck < 1} className="border border-amber-400 text-amber-400 p-2 text-xs hover:bg-amber-400 hover:text-black disabled:opacity-30">
-                Play the Odds (1 LP): Re-roll
+            {/* ---- Auto danger verdict (one-tap override) ---- */}
+            <div className={`border-2 rounded-sm p-3 flex items-center gap-3 ${danger ? 'border-red-500 bg-[#1a0505]' : 'border-[#14FF00] bg-[#051a05]'}`}>
+              {danger ? <AlertTriangle size={22} className="text-red-500 shrink-0" /> : <ShieldCheck size={22} className="text-[#14FF00] shrink-0" />}
+              <div className="flex-1">
+                <div className={`font-bold ${danger ? 'text-red-500' : 'text-[#14FF00]'}`}>
+                  {danger ? 'YOU ARE IN DANGER' : 'LOOKS SAFE'}
+                </div>
+                <div className="text-[11px] normal-case opacity-70">
+                  {danger
+                    ? (autoDanger && dangerOverride === null ? 'Threats auto-detected in this scene.' : 'You judged this a threat.')
+                    : 'No immediate threat detected.'}
+                </div>
+              </div>
+              <button
+                onClick={() => setDangerOverride(!danger)}
+                className={`shrink-0 border rounded-sm px-2 py-1 text-[10px] uppercase ${danger ? 'border-[#14FF00] text-[#14FF00] hover:bg-[#14FF00] hover:text-black' : 'border-red-500 text-red-500 hover:bg-red-500 hover:text-black'}`}
+              >
+                {danger ? "It's safe" : 'Dangerous'}
               </button>
-              <button onClick={addFoes} className="border border-[#14FF00] p-2 text-xs hover:bg-[#14FF00] hover:text-black">Generate Foes</button>
-              <button onClick={addNpcToScene} className="border border-[#14FF00] p-2 text-xs hover:bg-[#14FF00] hover:text-black">Generate NPC (+1 XP)</button>
-              <button onClick={addDangerousNpc} className="border border-[#14FF00] p-2 text-xs hover:bg-[#14FF00] hover:text-black">Dangerous NPC</button>
             </div>
 
-            {encounterFoes.length > 0 && (
+            {/* ---- Add to scene (GM tools, tucked away) ---- */}
+            <div className="border border-[#14FF00]/40 rounded-sm">
+              <button onClick={() => setSceneMenuOpen(!sceneMenuOpen)} className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold hover:bg-[#14FF00]/10">
+                <span className="flex items-center gap-2"><PlusCircle size={14} /> Add to scene</span>
+                <ChevronRight size={14} className={sceneMenuOpen ? 'rotate-90 transition-transform' : 'transition-transform'} />
+              </button>
+              {sceneMenuOpen && (
+                <div className="grid grid-cols-2 gap-2 p-2 border-t border-[#14FF00]/30">
+                  <button onClick={addFoes} className="border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Generate Foes</button>
+                  <button onClick={addNpcToScene} className="border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Generate NPC (+1 XP)</button>
+                  <button onClick={addDangerousNpc} className="border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Dangerous NPC</button>
+                  <button onClick={playTheOdds} disabled={luck < 1} className="border border-amber-400 text-amber-400 rounded-sm p-2 text-xs hover:bg-amber-400 hover:text-black disabled:opacity-30">Play the Odds (1 LP)</button>
+                </div>
+              )}
+            </div>
+
+            {/* ---- What do you do? ---- */}
+            {danger ? (
+              <div className="space-y-2">
+                <button
+                  onClick={beginCombat}
+                  className="w-full border-2 border-red-500 text-red-500 rounded-sm p-3 font-bold hover:bg-red-500 hover:text-black animate-pulse flex items-center justify-center gap-2"
+                >
+                  <Swords size={18} /> Fight{encounterFoes.length > 0 ? ` — ${encounterFoes.map(f => f.name).join(', ')}` : ''}
+                </button>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => enterDangerAction('De-escalate')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
+                    <MessageCircle size={16} /> Talk Down
+                  </button>
+                  <button onClick={() => enterDangerAction('Outwit')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
+                    <Brain size={16} /> Outwit
+                  </button>
+                  <button onClick={() => enterDangerAction('Retreat')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
+                    <Wind size={16} /> Flee
+                  </button>
+                </div>
+                <button onClick={() => proceedToAction(true)} className="w-full border border-[#14FF00]/50 rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">
+                  Other actions (Scavenge, Meet, …) →
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={beginCombat}
-                className="w-full border-2 border-red-500 text-red-500 p-3 font-bold hover:bg-red-500 hover:text-black animate-pulse"
+                onClick={() => proceedToAction(false)}
+                className="w-full border-2 border-[#14FF00] rounded-sm p-3 font-bold hover:bg-[#14FF00] hover:text-black"
               >
-                ⚔ BEGIN COMBAT — {encounterFoes.map(f => f.name).join(', ')}
+                Proceed — it's Safe →
               </button>
             )}
-
-            <div className="border border-[#14FF00] p-3 space-y-2">
-              <div className="text-sm font-bold">
-                ARE YOU IN DANGER?
-                {dangerChecks[0] && <span className="text-red-500"> — threats auto-detected</span>}
-              </div>
-              {[
-                'Did the Encounter imply Danger or threat?',
-                'Does this Location have a Truth implying immediate Danger?',
-                'Does a Blocker or Quest here imply immediate Danger?'
-              ].map((q, i) => (
-                <label key={i} className="flex items-center gap-2 text-xs normal-case">
-                  <input
-                    type="checkbox"
-                    checked={dangerChecks[i]}
-                    onChange={e => setDangerChecks(dangerChecks.map((c, j) => j === i ? e.target.checked : c))}
-                  />
-                  {q}
-                </label>
-              ))}
-              <button
-                onClick={() => proceedToAction(dangerChecks.some(Boolean))}
-                className={`w-full border-2 p-2 font-bold ${dangerChecks.some(Boolean) ? 'border-red-500 text-red-500 hover:bg-red-500 hover:text-black' : 'border-[#14FF00] hover:bg-[#14FF00] hover:text-black'}`}
-              >
-                {dangerChecks.some(Boolean) ? 'Proceed — IN DANGER' : 'Proceed — Safe'}
-              </button>
-            </div>
           </div>
         );
       })()}

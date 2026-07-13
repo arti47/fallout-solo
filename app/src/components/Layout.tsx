@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { Activity, Backpack, Database, Map as MapIcon, Book, Swords, BookOpen, Compass } from 'lucide-react';
+import { Activity, Backpack, Database, Map as MapIcon, Book, BookOpen, Compass } from 'lucide-react';
 import SkillTestModal from './SkillTestModal';
 import OracleWidget from './OracleWidget';
 import DeathModal from './DeathModal';
@@ -11,7 +11,6 @@ export default function Layout() {
 
   const navItems = [
     { name: 'Round', path: '/round', icon: Compass },
-    { name: 'Combat', path: '/combat', icon: Swords },
     { name: 'Stats', path: '/stats', icon: Activity },
     { name: 'Inv', path: '/inventory', icon: Backpack },
     { name: 'Data', path: '/data', icon: Database },

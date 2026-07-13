@@ -17,15 +17,19 @@ A digital companion and virtual game master for the "Fallout: Wasteland Wanderer
 
 ## Current Architecture & State for AI Assistants
 
-The app lives in `app/` (Vite + React 19 + TypeScript + Tailwind + zustand). Build check: `cd app && npm run build`.
+The app lives in `app/` (Vite + React 19 + TypeScript + Tailwind + zustand). Build check: `cd app && npm run build`. Deployed to GitHub Pages (project site at base `/fallout-solo/`) via `.github/workflows/deploy.yml` on push to `main`.
+
+### Working conventions (standing rules)
+- **Always merge finished work to `main`.** Feature work is developed on the assigned branch, then merged into `main` (which auto-deploys via the Pages workflow). Don't leave completed work stranded on a branch.
+- **Always keep this `CLAUDE.MD` current.** Whenever the app's architecture, flow, or major features change, update this file in the same change so it never drifts from the code.
 
 ### State Management (`src/store/`)
 - `gameState.ts`: `zustand` + `persist` (localStorage key `wasteland-wanderer-storage`). Holds character (stats, perks, injuries, description), inventory (gear with `value`/`condition`/`mods`), world (`sectorData` per-square: explored/settlement/faction/icon/truths/reputation), round engine state (`round`, `day`, `stage`, `inDanger`, `currentEncounter`, `scavengedThisRound`, `tradedThisRound`, `nextTestModifier`), quests (`mainQuest` incl. blocker location/Hunted threshold, `sideQuests`), `npcs`, combat (`activeFoes`, `combatState`, log), and settings (`soundEnabled`, `tutorialEnabled`, `seenTutorials`). `getInitialGameData()` is the single source of fresh-character defaults (used by Hard Reset). XP accumulates and is spent via `addPerk` (1 XP = 1 Perk = +1 Level).
 - `uiState.ts`: unpersisted overlay state for `<GlobalModal>` (alert/confirm). NOTE: GlobalModal closes BEFORE invoking callbacks so chained confirms survive.
 
 ### Pages / Tabs (`src/pages/`)
-- **RoundTab** (primary play surface): the guided Travel → Encounter → Take Action → Journal loop. Contains the `ActionResolver` (2d20 tests with best-skill preselection, auto-detected modifiers, reputation modifier, Try-Your-Luck, AP spends, selectable complications with applied effects via the choice-effect interpreter, Trade shop, Mod & Repair workbench, one-tap smart Rest), encounter auto-population (parses `[FOE]`/`[NPC]`/`[SIDE QUEST]`/`[CHEM]` tokens into real game objects), Begin Combat handoff, side-quest completion with real rewards (`applyQuestReward`), Clear Blocker flow, Mobile/Hunted travel rolls, and on-demand location generation/conversion for any map square.
-- **CombatTab**: full engine UI — Oppose/Slaughter/Outwit/De-escalate/Retreat, Endure interrupt on incoming damage, threat-order foe turns, selectable complications, per-foe loot, auto-return to the Round when combat ends.
+- **RoundTab** (primary play surface): the guided Travel → Encounter → Take Action → Journal loop. Contains the `ActionResolver` (2d20 tests with best-skill preselection, auto-detected modifiers, reputation modifier, Try-Your-Luck, AP spends, selectable complications with applied effects via the choice-effect interpreter, Trade shop, Mod & Repair workbench, one-tap smart Rest), encounter auto-population (parses `[FOE]`/`[NPC]`/`[SIDE QUEST]`/`[CHEM]` tokens into real game objects), side-quest completion with real rewards (`applyQuestReward`), Clear Blocker flow, Mobile/Hunted travel rolls, and on-demand location generation/conversion for any map square. **Combat is hosted inline**: when `combatActive`, RoundTab renders `<CombatView>` in place (no tab navigation). The **Encounter stage** shows an auto danger verdict with a one-tap override, an "Add to scene" menu for the GM generators, and prominent Fight / Talk Down / Outwit / Flee choices (see the Encounter → Combat flow section below).
+- **CombatTab**: hidden `/combat` route (not in the nav) — a quick-skirmish sandbox that spins up a random fight and renders `<CombatView>`. The canonical encounter → combat flow lives in RoundTab.
 - **StatsTab**: vitals, S.P.E.C.I.A.L., skills, perks/injuries list, Make Camp, and a Level Up button (opens the perk picker) whenever XP ≥ 1.
 - **InventoryTab**: caps/supplies/gear, equip + consume (effects applied).
 - **DataTab**: GEN panel (10 one-tap generators, all persisted + journaled), real quest log (main + side with DROP), persistent Known NPCs roster, save export/import, story export, sound/tutorial toggles, Hard Reset.
@@ -35,7 +39,7 @@ The app lives in `app/` (Vite + React 19 + TypeScript + Tailwind + zustand). Bui
 - **CharacterCreation** (`creation/Step1-7`): book-exact wizard; stages auto-advance when complete (points spent, tags picked, gear chosen).
 
 ### Components (`src/components/`)
-- **GlobalModal** (alert/confirm), **SkillTestModal** (manual 2d20 widget), **OracleWidget** (book dice logic + Cheat the Oracle), **DeathModal** (Death questions, Miraculous Escape, epilogue), **LevelUpModal** (perk picker with prerequisite checks), **TutorialOverlay** (route-driven first-visit tips), **dice/DiceRoller** (3D physics d20s).
+- **CombatView** (`CombatView.tsx`): the redesigned, self-contained combat UI rendered inline by RoundTab (and by the hidden CombatTab sandbox). Persistent HUD (HP bar, AP/LP, equipped weapon & armor, per-foe Threat/status, Combat State banner), tap-a-foe-to-attack with auto-best-weapon (one-tap change), equal-billing action modes (Attack/Slaughter/Outwit/Talk Down/Flee), pre-roll AP/Luck boosts + post-roll re-roll, dice-reveal-then-verdict, an "enemy turn" beat, Endure/Complication as spotlight modals, and a victory/talk/flee summary card. Wraps the pure `combatEngine.ts` logic; takes an `onExit(toStage)` callback. **GlobalModal** (alert/confirm), **SkillTestModal** (manual 2d20 widget), **OracleWidget** (book dice logic + Cheat the Oracle), **DeathModal** (Death questions, Miraculous Escape, epilogue), **LevelUpModal** (perk picker with prerequisite checks), **TutorialOverlay** (route-driven first-visit tips), **dice/DiceRoller** (3D physics d20s).
 
 ### Utils (`src/utils/`)
 - `skillTest.ts` (pure 2d20 engine: TN, tag crits, Try-Your-Luck, re-roll-worst-die), `combatEngine.ts` (foe turns as declarative effects; ~25 special abilities; defeat rules; loot), `sound.ts` (Web Audio SFX, respects `soundEnabled`), `storyExport.ts` (Markdown compile).
@@ -131,3 +135,18 @@ Player-feedback driven improvements after the roadmap (design principle: **autom
 - **Flow fixes**: combat auto-returns to the Round (Retreat → Journal stage), creation stages auto-advance when complete, best-skill/best-weapon pre-selection with TNs shown, dice timing ~2.5× faster, Codex fully de-OCR'd (no page references anywhere; ch.7 generated from data).
 
 **Known intentional behaviors**: Hard Reset resets in-memory state before clearing storage (race-proof); manual NPC generation grants the book's +1 XP; complications remain a player choice by design.
+
+---
+
+## Encounter → Combat Unified Flow Redesign — ✅ DONE
+
+Reworked the encounter and combat experience into a single guided, fewer-tap flow (previously the encounter stage exposed raw GM bookkeeping and combat lived on a separate tab). Rules math, auto-detection, log flavor, and tension are unchanged — only the UX and where combat renders.
+
+- **Combat merged into the Round loop**: extracted all combat UX into `components/CombatView.tsx`, rendered inline by RoundTab when `combatActive` — no navigating to a `/combat` tab and back. `CombatView` takes `onExit('action' | 'journal')`; RoundTab passes `setStage`.
+- **Guided combat turn**: tap a foe card to attack it (target + act in one gesture); best weapon auto-selected with a one-tap change chip; **equal-billing** action modes Attack / Slaughter / Outwit / Talk Down / Flee. Pre-roll boosts (spend AP for extra d20s, Try Luck) and a post-roll re-roll-worst-die, consistent with Round actions. A dice-reveal overlay shows the **actual rolls** (hit/crit/complication colored) then the verdict, gated by a short "Continue".
+- **Visual-first feedback**: HP bar, per-foe Threat, hit flashes, and a brief "ENEMY TURN" beat before one foe acts. Endure (incoming damage) and Complication (pick what goes wrong) are spotlight modal overlays. A summary card (spoils / injuries taken / HP) closes the fight.
+- **Encounter stage**: the 3-checkbox "Are you in Danger?" panel is replaced by an **auto danger verdict** (from the existing token auto-detection) with a one-tap override; the GM generators (Generate Foes/NPC/Dangerous NPC/Play the Odds) collapse into an **"Add to scene"** menu; a prominent **Fight** plus **Talk Down / Outwit / Flee** peers (the non-Fight peers jump to the Action stage with that dangerous action pre-opened via `enterDangerAction`).
+- **Combat tab retired from nav**: `Layout.tsx` no longer lists Combat; the `/combat` route remains as a hidden quick-skirmish sandbox (`CombatTab.tsx` → `CombatView`).
+- **Readability**: larger base fonts and tap targets throughout the new components while keeping the Pip-Boy/CRT aesthetic. Verified in a headless-Chromium smoke test (seed character → attack → dice reveal → foe turn) with no runtime errors.
+
+Audience target for this pass: newcomer-friendly and works on phone + desktop.
