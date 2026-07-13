@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { sfx } from '../utils/sound';
 
-type PlayerCombatAction = 'Oppose' | 'Slaughter' | 'Outwit' | 'De-escalate' | 'Retreat';
+export type PlayerCombatAction = 'Oppose' | 'Slaughter' | 'Outwit' | 'De-escalate' | 'Retreat';
 
 /** Display metadata for each combat action mode (the "equal billing" row). */
 const ACTION_META: Record<PlayerCombatAction, { label: string; icon: typeof Swords; hint: string }> = {
@@ -76,9 +76,11 @@ interface PendingRoll {
 interface CombatViewProps {
   /** Called when the fight is fully resolved and the player taps Continue. */
   onExit: (toStage: 'action' | 'journal') => void;
+  /** Which action mode to preselect (e.g. entering via Talk Down / Flee). */
+  initialAction?: PlayerCombatAction;
 }
 
-export default function CombatView({ onExit }: CombatViewProps) {
+export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatViewProps) {
   const {
     activeFoes, combatLog, combatState, hp, maxHp, rads, ap, luck, gear, special, skills,
     endCombat, addCombatLog, updateFoeThreat, updateHp, updateRads, updateAp, updateLuck,
@@ -91,7 +93,7 @@ export default function CombatView({ onExit }: CombatViewProps) {
   const bestWeaponIdx = WEAPON_SOLUTIONS.reduce(
     (best, s, i) => (solutionTn(s) > solutionTn(WEAPON_SOLUTIONS[best]) ? i : best), 0);
 
-  const [selectedAction, setSelectedAction] = useState<PlayerCombatAction>('Oppose');
+  const [selectedAction, setSelectedAction] = useState<PlayerCombatAction>(initialAction);
   const [weaponIdx, setWeaponIdx] = useState(bestWeaponIdx);
   const [solutionIdx, setSolutionIdx] = useState(0);
   const [weaponPicker, setWeaponPicker] = useState(false);
@@ -299,7 +301,7 @@ export default function CombatView({ onExit }: CombatViewProps) {
 
   /** After the player's move resolves: radiation tick, then either win or a
    *  short "enemy turn" beat before one foe acts. */
-  const concludePlayerTurn = () => {
+  const concludePlayerTurn = (foeActions = 1) => {
     if (radiationState) {
       updateRads(1);
       addCombatLog('The radiation state burns you. (+1 Rad)');
@@ -310,7 +312,9 @@ export default function CombatView({ onExit }: CombatViewProps) {
     }
     setPhase('enemyTurn');
     setTimeout(() => {
-      runFoeTurn();
+      for (let i = 0; i < foeActions && useGameState.getState().activeFoes.length > 0; i++) {
+        runFoeTurn();
+      }
       if (useGameState.getState().activeFoes.length === 0) {
         showVictory();
       } else {
@@ -527,15 +531,20 @@ export default function CombatView({ onExit }: CombatViewProps) {
         setEndState({ kind: 'talk', toStage: 'action' });
         return;
       }
-      addCombatLog('They are NOT in the mood to talk — a foe acts!');
+      addCombatLog('They are NOT in the mood to talk — TWO foes act!');
       if (complicationOptions) { setPendingComplication(complicationOptions); return; }
-      concludePlayerTurn();
+      concludePlayerTurn(2);
       return;
     } else if (action === 'Outwit') {
       if (outcome.passed) {
         addCombatLog(`Your plan works! ${target.template.name} is taken out of the fight.`);
         flashHit(target.id);
         defeatFoe(target, false);
+      } else {
+        addCombatLog('Your gambit backfires — TWO foes seize the moment!');
+        if (complicationOptions) { setPendingComplication(complicationOptions); return; }
+        concludePlayerTurn(2);
+        return;
       }
     } else if (action === 'Retreat') {
       if (outcome.passed) {

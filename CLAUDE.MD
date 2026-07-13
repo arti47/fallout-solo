@@ -188,9 +188,11 @@ Deviations found and fixed:
 - **Meet fabricated a new NPC** and wrongly awarded the "new face" +1 XP each time. Corrected: Meet now visits an existing NPC at the Location, learns a Secret, and attaches the Side Quest to that giver — no new NPC, no bonus XP.
 - **Endure + Heavy Armor** could still be reduced to 0 HP. Corrected: a successful Endure in Heavy (non-Power) Armor now cannot drop you below 1 HP (`CombatView`).
 
-Known deviations still open (need a design decision — several stem from combat having two resolution paths: the inline `CombatView` and the Round `ActionResolver`):
-- **Dangerous actions resolved via the Round `ActionResolver`** (Talk Down / Outwit / Flee opened from the encounter) set danger off on success but don't apply the book's failure consequences (De-escalate = two foes act; Slaughter = suffer the shortfall; Outwit = foes activate; Retreat = all foes act). The full consequences exist only in `CombatView`. De-escalate failure in `CombatView` also currently runs one foe, not two.
-- **Scavenge failure** doesn't auto-spawn the protecting Foe / Combat State.
-- **Modify & Repair failure** doesn't apply the Broken condition (item is chosen after success in the workbench flow, so there's no target on failure).
-- **Pay a Doctor / Pay an Expert** ("Special" solutions) don't auto-succeed for Caps — selecting them would mis-roll.
-- **Irradiated locations** only apply +1 Rad on travel-in; the book also charges Rad on travel-out, encounter start/finish, and after each Safe Action there.
+Second-pass fixes (all four selected open items resolved):
+- **Dangerous actions unified through the combat engine.** Every danger-resolution entry point — the encounter's Fight / Talk Down / Outwit / Flee and the Action-stage Dangerous Actions — now opens `CombatView` with the mode preselected (`initialAction` prop; `startCombatWithMode` + `DANGER_MODE` map), so the book's full success/failure consequences always apply. De-escalate and Outwit failures now have **two** foes act (`concludePlayerTurn(foeActions)`).
+- **Scavenge failure** now spawns the protecting Foe + a Combat State and sets Danger.
+- **Modify & Repair** now picks the target item **before** the roll; a failed roll applies Broken (or destroys an already-Broken item).
+- **Pay a Doctor / Pay an Expert** ("Special" solutions) now auto-succeed for Caps (1 for Patch Up, 3 for Mod & Repair, Settlement only) with no AP Additional Successes.
+- **Irradiated locations** now charge 1 Rad on travel out, at encounter start and finish, and after each Safe-Action test (in addition to travel in).
+
+Still-open minor item: the "after any Safe Action" irradiation fires after *tested* safe actions; no-test safe actions (Rest, Level Up) don't trigger it.

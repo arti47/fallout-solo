@@ -20,6 +20,7 @@ import { runSkillTest, rerollWorstDie } from '../utils/skillTest';
 import type { TestOutcome } from '../utils/skillTest';
 import LevelUpModal from '../components/LevelUpModal';
 import CombatView from '../components/CombatView';
+import type { PlayerCombatAction } from '../components/CombatView';
 import { sfx } from '../utils/sound';
 import { Footprints, Zap, Swords, Book, ChevronRight, Dices, MessageCircle, Brain, Wind, PlusCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 
@@ -50,13 +51,20 @@ const isAdjacent = (a: number, b: number) => {
 
 const ATTR_KEY_MAP: Record<string, keyof Special> = { STR: 'S', PER: 'P', END: 'E', CHA: 'C', INT: 'I', AGI: 'A', LCK: 'L' };
 
+// Dangerous Actions are resolved by the combat engine (CombatView), which
+// applies the book's full success/failure consequences.
+const DANGER_MODE: Record<string, PlayerCombatAction> = {
+  'Oppose': 'Oppose', 'Slaughter': 'Slaughter', 'Outwit': 'Outwit',
+  'De-escalate': 'De-escalate', 'Retreat': 'Retreat'
+};
+
 // =================================================================
 // ACTION RESOLVER — runs one Pick-a-Path action through the 2d20 engine
 // =================================================================
 function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone: () => void; onFoes?: (foes: FoeTemplate[]) => void }) {
   const {
     special, skills, ap, luck, caps, updateAp, updateLuck, updateCaps, appendJournal, updateSupplies,
-    updateHp, addGear, removeGear, gear, injuries, removeInjury, currentSector, updateSectorData,
+    updateHp, updateRads, addGear, removeGear, gear, injuries, removeInjury, currentSector, updateSectorData,
     sectorData, setDanger, markScavenged, markTraded, addNpc, addSideQuest, tradedThisRound,
     addInjury, nextTestModifier, setNextTestModifier, hp, maxHp, rads, supplies
   } = useGameState();
@@ -85,6 +93,9 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
   const [stock, setStock] = useState<GearItem[]>([]);
   // Mod & Repair: which gear item is on the workbench.
   const [workItemId, setWorkItemId] = useState<string | null>(null);
+  // Set when the outcome was bought via a "Pay a Doctor/Expert" Special
+  // solution (auto-success; no AP may be spent on Additional Successes).
+  const [paidSpecial, setPaidSpecial] = useState(false);
 
   const solution = action.solutions[solutionIndex];
   const attrKeyMap = ATTR_KEY_MAP;
@@ -294,6 +305,34 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
         setStock(items);
         notes.push('The trader senses your desperation — everything costs DOUBLE.');
       }
+      if (action.name === 'Scavenge') {
+        // Failure (pg.133): the loot is guarded — a Foe appears; a Combat State
+        // decides whether you are In Danger.
+        markScavenged();
+        const gen = generateFoeEncounter();
+        const parsed = gen.scenarios.flatMap(parseFoesFromScenario);
+        const final = parsed.length ? parsed : [getRandomFoe()];
+        onFoes?.(final);
+        setDanger(true);
+        const st = rollCombatStateEntry();
+        notes.push(`The loot is guarded! ${final.map(f => f.name).join(', ')} appear — Combat State: ${st.name}. You are IN DANGER.`);
+      }
+      if (action.name === 'Modify and Repair Gear') {
+        // Failure (pg.132): the chosen item gains Broken; if already Broken, it
+        // is destroyed.
+        const item = gear.find(g => g.id === workItemId);
+        if (item) {
+          if (item.condition === 'Broken') {
+            removeGear(item.id);
+            notes.push(`You wreck it beyond saving — ${item.name} is destroyed.`);
+          } else {
+            useGameState.setState(s => ({
+              gear: s.gear.map(g => g.id === item.id ? { ...g, condition: 'Broken' } : g)
+            }));
+            notes.push(`Botched the job — ${item.name} is now BROKEN.`);
+          }
+        }
+      }
       return notes;
     }
     switch (action.name) {
@@ -377,6 +416,34 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
   };
 
   const roll = () => {
+    if (action.name === 'Modify and Repair Gear' && !workItemId) return;
+
+    // "Pay a Doctor" (Patch Up) / "Pay an Expert" (Mod & Repair): in a
+    // Settlement, spend Caps to automatically succeed — no dice, and no AP may
+    // be spent on Additional Successes (pg.130/132).
+    if (solution?.attribute === 'Special') {
+      const cost = action.name === 'Patch Up' ? 1 : 3;
+      if (!sector?.isSettlement) {
+        appendJournal(`${solution.label}: only available in a Settlement.`);
+        return;
+      }
+      if (caps < cost) {
+        appendJournal(`Not enough Caps to pay (need ${cost} Stack${cost > 1 ? 's' : ''}).`);
+        return;
+      }
+      updateCaps(-cost);
+      const auto: TestOutcome = {
+        rolls: [], targetNumber: 0, critThreshold: 0,
+        successes: Math.max(1, difficulty), complications: 0, passed: true, excess: 0, tryLuck: false
+      };
+      setPaidSpecial(true);
+      sfx.success();
+      setOutcome(auto);
+      setBonusNotes(applyOutcome(auto));
+      appendJournal(`${action.name}: paid ${cost} Stack${cost > 1 ? 's' : ''} of Caps for an expert — automatic success.`);
+      return;
+    }
+
     // Mod & Repair cost (pg.132): consume one piece of Scrap, or 3 Stacks of Caps.
     if (action.name === 'Modify and Repair Gear') {
       const scrap = gear.find(g => g.type === 'Junk');
@@ -406,7 +473,13 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
     }, special.L);
     if (result.passed) sfx.success(); else sfx.failure();
     setOutcome(result);
-    setBonusNotes(applyOutcome(result));
+    const notes = applyOutcome(result);
+    // Irradiated location (pg.111): suffer 1 Rad after completing any Safe Action.
+    if (action.category === 'safe' && sector?.truths?.some(t => t.startsWith('Irradiated'))) {
+      updateRads(1);
+      notes.push('The irradiated ground gnaws at you. (+1 Rad)');
+    }
+    setBonusNotes(notes);
     appendJournal(
       `${action.name} — ${solution?.label ?? ''} (Diff ${difficulty}, TN ${result.targetNumber}${result.tryLuck ? ', Trying Luck' : ''})\n` +
       `Rolled: ${result.rolls.join(', ')} → ${result.passed ? 'PASSED' : 'FAILED'} (${result.successes}/${difficulty}${result.complications ? `, ${result.complications} complication(s)` : ''})`
@@ -632,7 +705,7 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
           </div>
         )}
 
-        {outcome.passed && action.additionalSuccess.length > 0 && (
+        {outcome.passed && !paidSpecial && action.additionalSuccess.length > 0 && (
           <div className="border-t border-[#14FF00]/30 pt-2 space-y-1">
             <div className="text-xs font-bold">ADDITIONAL SUCCESSES (1 AP each — AP: {ap}):</div>
             {action.additionalSuccess.map((extra, i) => (
@@ -753,6 +826,26 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
         </div>
       )}
 
+      {/* Mod & Repair: pick the item BEFORE rolling, so a failed roll has a
+          target to Break (pg.132). */}
+      {action.name === 'Modify and Repair Gear' && (
+        <div className="border border-amber-400/60 p-2 space-y-1">
+          <div className="text-xs font-bold text-amber-400">CHOOSE AN ITEM TO WORK ON:</div>
+          {gear.filter(g => ['Weapon', 'Armor', 'Equipment'].includes(g.type)).map(item => (
+            <button
+              key={item.id}
+              onClick={() => setWorkItemId(item.id)}
+              className={`block w-full text-left text-xs normal-case border p-1.5 ${workItemId === item.id ? 'bg-amber-400/20 border-amber-400' : 'border-amber-400/30'}`}
+            >
+              {item.name}{item.condition ? ` [${item.condition.split(',')[0]}]` : ''}{item.mods?.length ? ` {${item.mods.join(', ')}}` : ''}
+            </button>
+          ))}
+          {gear.filter(g => ['Weapon', 'Armor', 'Equipment'].includes(g.type)).length === 0 && (
+            <div className="text-xs normal-case opacity-60">No modifiable gear.</div>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-between items-center text-sm border-y border-[#14FF00]/40 py-2">
         <span>DIFFICULTY: <span className="text-white font-bold text-lg">{difficulty}</span></span>
         <label className="flex items-center gap-1 text-xs">
@@ -763,8 +856,12 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
 
       <div className="flex gap-2">
         <button onClick={onDone} className="flex-1 border border-[#14FF00] p-2 hover:bg-[#14FF00] hover:text-black">Cancel</button>
-        <button onClick={roll} className="flex-1 border-2 border-[#14FF00] p-2 font-bold bg-black hover:bg-[#14FF00] hover:text-black animate-pulse flex items-center justify-center gap-2">
-          <Dices size={16} /> Roll 2d20
+        <button
+          onClick={roll}
+          disabled={action.name === 'Modify and Repair Gear' && !workItemId}
+          className="flex-1 border-2 border-[#14FF00] p-2 font-bold bg-black hover:bg-[#14FF00] hover:text-black disabled:opacity-30 animate-pulse flex items-center justify-center gap-2"
+        >
+          <Dices size={16} /> {action.name === 'Modify and Repair Gear' && !workItemId ? 'Pick an item first' : 'Roll 2d20'}
         </button>
       </div>
     </div>
@@ -797,10 +894,14 @@ export default function RoundTab() {
   const [sceneMenuOpen, setSceneMenuOpen] = useState(false);
   /** Player override of the auto-detected danger verdict (null = use auto). */
   const [dangerOverride, setDangerOverride] = useState<boolean | null>(null);
+  /** Action mode to preselect when combat opens (Fight / Talk Down / …). */
+  const [initialCombatAction, setInitialCombatAction] = useState<PlayerCombatAction>('Oppose');
 
   const sector = sectorData[currentSector];
   const isSettlement = !!sector?.isSettlement;
   const atBlocker = mainQuest?.blockerLocation === currentSector;
+  const isIrradiated = (square: number) =>
+    !!sectorData[square]?.truths?.some(t => t.startsWith('Irradiated'));
 
   const adjacentSquares = useMemo(
     () => Array.from({ length: 25 }, (_, i) => i + 1).filter(n => isAdjacent(currentSector, n) && !IMPASSABLE.includes(n)),
@@ -842,6 +943,12 @@ export default function RoundTab() {
 
   const handleTravel = () => {
     if (!selectedSquare) return;
+    // Irradiated location (pg.111): suffer 1 Rad when Traveling OUT of one.
+    if (isIrradiated(currentSector)) {
+      updateRads(1);
+      sfx.geiger(4);
+      appendJournal('Leaving the irradiated ground costs you. (+1 Rad)');
+    }
     // Cost: 1 Supply, or lose 2 HP if you cannot pay (pg.108).
     if (supplies >= 1) {
       updateSupplies(-1);
@@ -1020,6 +1127,12 @@ export default function RoundTab() {
       autoPopulate(enc);
       setDangerOverride(null);
       setSceneMenuOpen(false);
+      // Irradiated location (pg.111): suffer 1 Rad when an Encounter starts here.
+      if (isIrradiated(currentSector)) {
+        updateRads(1);
+        sfx.geiger(4);
+        appendJournal('The encounter begins under a haze of radiation. (+1 Rad)');
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, currentEncounter]);
@@ -1054,15 +1167,19 @@ export default function RoundTab() {
     appendJournal(`Combat begins! (${foes.map(f => f.name).join(', ')}) — Combat State: ${state.name}`);
   };
 
-  /** Resolve the danger a non-violent way: jump to the Action stage with the
-   *  chosen dangerous action already open. */
-  const enterDangerAction = (name: string) => {
-    setDanger(true);
-    setDangerChecks([false, false, false]);
-    setExtras([]);
-    setStage('action');
-    const act = ACTIONS.find(a => a.name === name);
-    if (act) setActiveAction(act);
+  /** Enter combat with a specific action mode preselected (Fight / Talk Down /
+   *  Outwit / Flee / Slaughter) so danger is always resolved by the real engine
+   *  with the book's success/failure consequences. */
+  const startCombatWithMode = (mode: PlayerCombatAction) => {
+    // Irradiated location (pg.111): finishing the Encounter (here, by entering
+    // combat from it) costs 1 Rad.
+    if (stage === 'encounter' && isIrradiated(currentSector)) {
+      updateRads(1);
+      sfx.geiger(4);
+      appendJournal('The encounter closes in irradiated air. (+1 Rad)');
+    }
+    setInitialCombatAction(mode);
+    beginCombat();
   };
 
   const addNpcToScene = () => {
@@ -1085,6 +1202,12 @@ export default function RoundTab() {
   };
 
   const proceedToAction = (danger: boolean) => {
+    // Irradiated location (pg.111): suffer 1 Rad when the Encounter finishes.
+    if (isIrradiated(currentSector)) {
+      updateRads(1);
+      sfx.geiger(4);
+      appendJournal('You push on through the radiation. (+1 Rad)');
+    }
     setDanger(danger);
     setDangerChecks([false, false, false]);
     setExtras([]);
@@ -1326,7 +1449,7 @@ export default function RoundTab() {
           <h2 className="text-xl font-bold tracking-widest">ROUND {round}</h2>
           <span className="text-sm opacity-70">Square {currentSector}</span>
         </div>
-        <CombatView onExit={(toStage) => setStage(toStage)} />
+        <CombatView onExit={(toStage) => setStage(toStage)} initialAction={initialCombatAction} />
       </div>
     );
   }
@@ -1491,19 +1614,19 @@ export default function RoundTab() {
             {danger ? (
               <div className="space-y-2">
                 <button
-                  onClick={beginCombat}
+                  onClick={() => startCombatWithMode('Oppose')}
                   className="w-full border-2 border-red-500 text-red-500 rounded-sm p-3 font-bold hover:bg-red-500 hover:text-black animate-pulse flex items-center justify-center gap-2"
                 >
                   <Swords size={18} /> Fight{encounterFoes.length > 0 ? ` — ${encounterFoes.map(f => f.name).join(', ')}` : ''}
                 </button>
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => enterDangerAction('De-escalate')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
+                  <button onClick={() => startCombatWithMode('De-escalate')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
                     <MessageCircle size={16} /> Talk Down
                   </button>
-                  <button onClick={() => enterDangerAction('Outwit')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
+                  <button onClick={() => startCombatWithMode('Outwit')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
                     <Brain size={16} /> Outwit
                   </button>
-                  <button onClick={() => enterDangerAction('Retreat')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
+                  <button onClick={() => startCombatWithMode('Retreat')} className="border border-[#14FF00] rounded-sm py-2 flex flex-col items-center gap-1 text-[10px] font-bold hover:bg-[#14FF00] hover:text-black">
                     <Wind size={16} /> Flee
                   </button>
                 </div>
@@ -1560,8 +1683,11 @@ export default function RoundTab() {
                       </button>
                     );
                   }
+                  const onClick = DANGER_MODE[a.name]
+                    ? () => startCombatWithMode(DANGER_MODE[a.name])
+                    : () => setActiveAction(a);
                   return (
-                    <button key={a.name} onClick={() => setActiveAction(a)}
+                    <button key={a.name} onClick={onClick}
                       className="border border-[#14FF00] p-2 text-sm hover:bg-[#14FF00] hover:text-black text-left">
                       <div className="font-bold">{a.name}</div>
                       <div className="text-[10px] opacity-60 normal-case">{a.quote.slice(0, 40)}…</div>
