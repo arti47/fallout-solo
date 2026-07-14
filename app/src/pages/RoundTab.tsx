@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useGameState } from '../store/gameState';
 import type { Special, EncounterInfo, GearItem } from '../store/gameState';
 import { useUIState } from '../store/uiState';
@@ -1567,14 +1567,15 @@ export default function RoundTab() {
           <h2 className="text-xl font-bold tracking-widest">ROUND {round}</h2>
           <span className="text-sm opacity-70">{gameDate(day)} • Square {currentSector}{isSettlement ? ' (Settlement)' : ''}</span>
         </div>
-        <div className="flex items-center gap-1 mt-2">
+        <div className="flex items-center gap-0.5 mt-2">
           {STAGES.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-1 flex-1">
-              <div className={`flex items-center gap-1 px-2 py-1 border text-xs flex-1 justify-center ${stage === s.id ? 'bg-[#14FF00] text-black border-[#14FF00] font-bold' : 'border-[#14FF00]/40 opacity-60'}`}>
-                <s.icon size={12} /> {s.label}
+            <Fragment key={s.id}>
+              <div className={`flex items-center justify-center gap-1 px-1 py-1 border text-[10px] min-w-0 ${stage === s.id ? 'flex-[1.3] bg-[#14FF00] text-black border-[#14FF00] font-bold' : 'flex-1 border-[#14FF00]/40 opacity-60'}`}>
+                {stage === s.id && <s.icon size={11} className="shrink-0" />}
+                <span className="truncate">{s.label}</span>
               </div>
-              {i < STAGES.length - 1 && <ChevronRight size={12} className="opacity-40" />}
-            </div>
+              {i < STAGES.length - 1 && <ChevronRight size={10} className="opacity-40 shrink-0" />}
+            </Fragment>
           ))}
         </div>
       </div>
