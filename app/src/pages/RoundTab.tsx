@@ -4,8 +4,7 @@ import type { Special, EncounterInfo, GearItem } from '../store/gameState';
 import { useUIState } from '../store/uiState';
 import {
   rollInhabitants, resolveInhabitants, rollIcon, rollWastelandTruth,
-  rollSettlementTruth, rollSettlementEncounter, rollWastelandEncounter,
-  rollCombatStateEntry
+  rollSettlementTruth, rollCombatStateEntry, encounterAt
 } from '../data/encounters';
 import { parseFoesFromScenario, getRandomFoe } from '../data/bestiary';
 import type { FoeTemplate } from '../data/bestiary';
@@ -64,7 +63,7 @@ const DANGER_MODE: Record<string, PlayerCombatAction> = {
 function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone: () => void; onFoes?: (foes: FoeTemplate[]) => void }) {
   const {
     special, skills, ap, luck, caps, updateAp, updateLuck, updateCaps, appendJournal, updateSupplies,
-    updateHp, updateRads, addGear, removeGear, gear, injuries, removeInjury, currentSector, updateSectorData,
+    updateHp, addGear, removeGear, gear, injuries, removeInjury, currentSector, updateSectorData,
     sectorData, setDanger, markScavenged, markTraded, addNpc, addSideQuest, tradedThisRound,
     addInjury, nextTestModifier, setNextTestModifier, hp, maxHp, rads, supplies
   } = useGameState();
@@ -473,13 +472,7 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
     }, special.L);
     if (result.passed) sfx.success(); else sfx.failure();
     setOutcome(result);
-    const notes = applyOutcome(result);
-    // Irradiated location (pg.111): suffer 1 Rad after completing any Safe Action.
-    if (action.category === 'safe' && sector?.truths?.some(t => t.startsWith('Irradiated'))) {
-      updateRads(1);
-      notes.push('The irradiated ground gnaws at you. (+1 Rad)');
-    }
-    setBonusNotes(notes);
+    setBonusNotes(applyOutcome(result));
     appendJournal(
       `${action.name} — ${solution?.label ?? ''} (Diff ${difficulty}, TN ${result.targetNumber}${result.tryLuck ? ', Trying Luck' : ''})\n` +
       `Rolled: ${result.rolls.join(', ')} → ${result.passed ? 'PASSED' : 'FAILED'} (${result.successes}/${difficulty}${result.complications ? `, ${result.complications} complication(s)` : ''})`
@@ -886,6 +879,7 @@ export default function RoundTab() {
   const [dangerChecks, setDangerChecks] = useState<boolean[]>([false, false, false]);
   const [activeAction, setActiveAction] = useState<GameAction | null>(null);
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const [levelAtOpen, setLevelAtOpen] = useState(0);
   const [journalDraft, setJournalDraft] = useState('');
   const [extras, setExtras] = useState<string[]>([]);
   /** Foes rolled for this encounter, ready to fight. */
@@ -896,12 +890,24 @@ export default function RoundTab() {
   const [dangerOverride, setDangerOverride] = useState<boolean | null>(null);
   /** Action mode to preselect when combat opens (Fight / Talk Down / …). */
   const [initialCombatAction, setInitialCombatAction] = useState<PlayerCombatAction>('Oppose');
+  /** d20 that produced the current (non-blocker) encounter, for Play the Odds. */
+  const [encounterRoll, setEncounterRoll] = useState(1);
+  /** Play the Odds: the previewed (adjusted) roll while nudging, else null. */
+  const [poddsRoll, setPoddsRoll] = useState<number | null>(null);
 
   const sector = sectorData[currentSector];
   const isSettlement = !!sector?.isSettlement;
   const atBlocker = mainQuest?.blockerLocation === currentSector;
   const isIrradiated = (square: number) =>
     !!sectorData[square]?.truths?.some(t => t.startsWith('Irradiated'));
+  /** Irradiated location (pg.111): 1 Rad after completing any Safe Action. */
+  const chargeIrradiatedSafeAction = () => {
+    if (isIrradiated(currentSector)) {
+      updateRads(1);
+      sfx.geiger(3);
+      appendJournal('The irradiated ground gnaws at you. (+1 Rad)');
+    }
+  };
 
   const adjacentSquares = useMemo(
     () => Array.from({ length: 25 }, (_, i) => i + 1).filter(n => isAdjacent(currentSector, n) && !IMPASSABLE.includes(n)),
@@ -1038,7 +1044,16 @@ export default function RoundTab() {
         question: 'How does the Blocker manifest here, and what will it cost you to get past it?'
       };
     }
-    const enc = isSettlement ? rollSettlementEncounter() : rollWastelandEncounter();
+    // Roll the d20 explicitly and remember it so Play the Odds can adjust it.
+    const r = Math.floor(Math.random() * 20) + 1;
+    setEncounterRoll(r);
+    return encounterInfoFromRoll(r);
+  };
+
+  /** Builds the EncounterInfo for a specific d20 result on the current
+   *  (settlement/wasteland) encounter table. */
+  const encounterInfoFromRoll = (r: number): EncounterInfo => {
+    const enc = encounterAt(isSettlement, r);
     return {
       type: isSettlement ? 'settlement' : 'wasteland',
       title: enc.name,
@@ -1127,6 +1142,7 @@ export default function RoundTab() {
       autoPopulate(enc);
       setDangerOverride(null);
       setSceneMenuOpen(false);
+      setPoddsRoll(null);
       // Irradiated location (pg.111): suffer 1 Rad when an Encounter starts here.
       if (isIrradiated(currentSector)) {
         updateRads(1);
@@ -1137,14 +1153,36 @@ export default function RoundTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, currentEncounter]);
 
+  // Play the Odds (pg.94): after rolling on a table, spend 1 LP to adjust the
+  // result by up to your Luck Attribute. Here it nudges the Encounter roll —
+  // enter a preview, step within ±Luck, then Apply (only spends the LP if the
+  // result actually changed).
   const playTheOdds = () => {
-    if (luck < 1) return;
-    updateLuck(-1);
-    const enc = generateEncounter();
-    setEncounter(enc);
-    appendJournal(`Played the Odds (1 LP) — new Encounter: ${enc.title}`);
-    autoPopulate(enc);
-    setDangerOverride(null);
+    if (luck < 1 || poddsRoll !== null) return;
+    setPoddsRoll(encounterRoll);
+  };
+  const luckAttr = () => useGameState.getState().special.L;
+  const adjustPodds = (delta: number) => {
+    if (poddsRoll === null) return;
+    const lim = luckAttr();
+    const next = Math.max(1, Math.min(20, poddsRoll + delta));
+    // Bound the total shift to at most the Luck Attribute (pg.94).
+    if (Math.abs(next - encounterRoll) > lim) return;
+    setPoddsRoll(next);
+  };
+  const applyPodds = () => {
+    if (poddsRoll === null) return;
+    if (poddsRoll !== encounterRoll) {
+      if (luck < 1) { setPoddsRoll(null); return; }
+      updateLuck(-1);
+      const enc = encounterInfoFromRoll(poddsRoll);
+      setEncounter(enc);
+      appendJournal(`Played the Odds (1 LP): shifted the Encounter roll ${encounterRoll} → ${poddsRoll} — ${enc.title}`);
+      autoPopulate(enc);
+      setEncounterRoll(poddsRoll);
+      setDangerOverride(null);
+    }
+    setPoddsRoll(null);
   };
 
   const addFoes = () => {
@@ -1217,6 +1255,7 @@ export default function RoundTab() {
   // ---------- ACTION ----------
   const clearBlocker = () => {
     if (!mainQuest) return;
+    chargeIrradiatedSafeAction();
     const result = rollClearBlocker(level);
     if (result.name === 'New Blocker') {
       const newBlocker = rollMainQuestBlocker();
@@ -1426,6 +1465,7 @@ export default function RoundTab() {
   // Complete Side Quest (pg.125): reward applied for real + 1 XP + 1 Luck
   // Point, and the settlement remembers your help (Reputation +1 step).
   const completeSideQuest = (index: number) => {
+    chargeIrradiatedSafeAction();
     const quest = sideQuests[index];
     setSideQuestStatus(index, 'Completed');
     updateXp(1);
@@ -1639,10 +1679,34 @@ export default function RoundTab() {
                   <button onClick={addFoes} className="border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Generate Foes</button>
                   <button onClick={addNpcToScene} className="border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Generate NPC (+1 XP)</button>
                   <button onClick={addDangerousNpc} className="border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Dangerous NPC</button>
-                  <button onClick={playTheOdds} disabled={luck < 1} className="border border-amber-400 text-amber-400 rounded-sm p-2 text-xs hover:bg-amber-400 hover:text-black disabled:opacity-30">Play the Odds (1 LP)</button>
+                  <button onClick={playTheOdds} disabled={luck < 1 || enc.type === 'blocker' || poddsRoll !== null} className="border border-amber-400 text-amber-400 rounded-sm p-2 text-xs hover:bg-amber-400 hover:text-black disabled:opacity-30">Play the Odds (1 LP)</button>
                 </div>
               )}
             </div>
+
+            {/* ---- Play the Odds preview: nudge the encounter roll by up to Luck ---- */}
+            {poddsRoll !== null && (
+              <div className="border-2 border-amber-400 rounded-sm p-3 bg-[#1a1405] space-y-2">
+                <div className="text-xs font-bold text-amber-400 flex items-center gap-2">
+                  <Dices size={14} /> Play the Odds — shift up to {luckAttr()} (Luck)
+                </div>
+                <div className="flex items-center justify-center gap-3">
+                  <button onClick={() => adjustPodds(-1)} className="border border-amber-400 text-amber-400 w-8 h-8 rounded-sm hover:bg-amber-400 hover:text-black">−</button>
+                  <span className="text-white font-bold">roll {encounterRoll} → <span className="text-amber-400 text-lg">{poddsRoll}</span></span>
+                  <button onClick={() => adjustPodds(1)} className="border border-amber-400 text-amber-400 w-8 h-8 rounded-sm hover:bg-amber-400 hover:text-black">+</button>
+                </div>
+                <div className="text-xs normal-case text-white border border-amber-400/40 rounded-sm p-2">
+                  <span className="font-bold">{encounterInfoFromRoll(poddsRoll).title}</span>
+                  <span className="opacity-70"> — {encounterInfoFromRoll(poddsRoll).description.slice(0, 90)}…</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setPoddsRoll(null)} className="flex-1 border border-[#14FF00] rounded-sm p-2 text-xs hover:bg-[#14FF00] hover:text-black">Cancel (no LP)</button>
+                  <button onClick={applyPodds} disabled={poddsRoll !== encounterRoll && luck < 1} className="flex-1 border-2 border-amber-400 text-amber-400 rounded-sm p-2 text-xs font-bold hover:bg-amber-400 hover:text-black disabled:opacity-30">
+                    {poddsRoll === encounterRoll ? 'Keep original' : 'Apply (1 LP)'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* ---- What do you do? ---- */}
             {danger ? (
@@ -1701,7 +1765,11 @@ export default function RoundTab() {
           {activeAction ? (
             <ActionResolver
               action={activeAction}
-              onDone={() => setActiveAction(null)}
+              onDone={() => {
+                // Every Safe Action (tested or not) exposes you in an irradiated location.
+                if (activeAction?.category === 'safe') chargeIrradiatedSafeAction();
+                setActiveAction(null);
+              }}
               onFoes={(foes) => setEncounterFoes(prev => [...prev, ...foes])}
             />
           ) : (
@@ -1710,7 +1778,7 @@ export default function RoundTab() {
                 {availableActions.map(a => {
                   if (a.name === 'Level Up') {
                     return (
-                      <button key={a.name} onClick={() => setShowLevelUp(true)}
+                      <button key={a.name} onClick={() => { setLevelAtOpen(useGameState.getState().level); setShowLevelUp(true); }}
                         className="border border-amber-400 text-amber-400 p-2 text-sm hover:bg-amber-400 hover:text-black text-left">
                         <div className="font-bold">{a.name}</div>
                         <div className="text-[10px] opacity-70">{xp} XP ready to spend</div>
@@ -1814,7 +1882,11 @@ export default function RoundTab() {
         </div>
       )}
 
-      {showLevelUp && <LevelUpModal onClose={() => setShowLevelUp(false)} />}
+      {showLevelUp && <LevelUpModal onClose={() => {
+        // Leveling Up is a Safe Action — if a level was actually gained here, the irradiated ground still bites.
+        if (useGameState.getState().level > levelAtOpen) chargeIrradiatedSafeAction();
+        setShowLevelUp(false);
+      }} />}
     </div>
   );
 }
