@@ -153,6 +153,16 @@ Reworked the encounter and combat experience into a single guided, fewer-tap flo
 
 Audience target for this pass: newcomer-friendly and works on phone + desktop.
 
+### Structured Journaling (answer-the-prompt boxes) — ✅ DONE
+
+The game constantly poses narrative prompts, but the only place to write was one free-text terminal box. Added structured, per-prompt answer capture:
+
+- **`components/AnswerBox.tsx`**: a reusable tappable field that expands into a **full-screen focused editor** (category tag + question on top, big autofocus textarea, Cancel/Save). Reads/writes a structured entry in the store by a **stable `id`**, so re-opening the same prompt edits the same entry (and the same `id` used in two places — e.g. encounter stage + journal stage — stays in sync).
+- **Store** (`gameState.ts`): new `JournalEntry { id, type, question, answer, day, round, createdTs, updatedTs }` + `journalEntries[]`, with `upsertJournalEntry` (empty answer deletes) and `removeJournalEntry`. `type ∈ 'main' | 'side' | 'encounter' | 'oracle'`.
+- **Inline boxes wired in**: encounter/scene hooks and main-quest **blocker** prompts (RoundTab encounter + journal stages, ids `enc-r{round}` / `blocker-{sector}`); **side-quest** narrative questions (RoundTab active-quest list + DataTab quests, id `sq-{index}`); **main-quest** goal reflection (DataTab, id `main-goal`); and the **Oracle** result modal (`OracleWidget`, unique `oracle-{ts}` per question, records the question asked + what the Yes/No means).
+- **Journal tab** (`JournalTab.tsx`): rewritten as a **chronological timeline** (newest first) of all answered prompts with **filter chips** (All / Main / Side / Encounter / Oracle), each entry showing its colored category tag, Day/Round stamp, question, and an editable AnswerBox. The original free-form terminal log is kept below it.
+- Verified headless at 390px: tap opens the editor, Save persists to the store, the entry appears in the timeline, the type filter hides non-matching entries, and no horizontal overflow.
+
 ---
 
 ## Chapter 3 (Character Creation) Rules Audit — ✅ DONE

@@ -18,6 +18,7 @@ import type { GameAction } from '../data/actions';
 import { runSkillTest, rerollWorstDie } from '../utils/skillTest';
 import type { TestOutcome } from '../utils/skillTest';
 import LevelUpModal from '../components/LevelUpModal';
+import AnswerBox from '../components/AnswerBox';
 import CombatView from '../components/CombatView';
 import type { PlayerCombatAction } from '../components/CombatView';
 import { sfx } from '../utils/sound';
@@ -1637,9 +1638,14 @@ export default function RoundTab() {
               <h3 className={`font-bold ${enc.type === 'blocker' ? 'text-red-500' : 'text-white'}`}>{enc.title}</h3>
               <p className="text-sm normal-case opacity-90 whitespace-pre-line">{enc.description}</p>
               {enc.question && (
-                <p className="text-xs normal-case text-amber-400 border-t border-[#14FF00]/30 pt-2">
-                  Journal prompt: {enc.question}
-                </p>
+                <div className="border-t border-[#14FF00]/30 pt-2 space-y-1">
+                  <p className="text-xs normal-case text-amber-400">Journal prompt: {enc.question}</p>
+                  <AnswerBox
+                    id={enc.type === 'blocker' ? `blocker-${currentSector}` : `enc-r${round}`}
+                    type={enc.type === 'blocker' ? 'main' : 'encounter'}
+                    question={enc.question}
+                  />
+                </div>
               )}
             </div>
 
@@ -1837,6 +1843,15 @@ export default function RoundTab() {
                           >⟳ Barter (diff 2)</button>
                         </div>
                       )}
+                      {q.questions && (
+                        <AnswerBox
+                          id={`sq-${i}`}
+                          type="side"
+                          question={q.questions}
+                          showQuestion
+                          placeholder="Tap to answer this quest's prompt…"
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1865,8 +1880,13 @@ export default function RoundTab() {
         <div className="space-y-3">
           <div className="text-sm font-bold">=== Round {round} — {gameDate(day)} ===</div>
           {currentEncounter?.question && (
-            <div className="text-xs normal-case text-amber-400 border border-amber-400/50 p-2">
-              Prompt: {currentEncounter.question}
+            <div className="border border-amber-400/50 p-2 space-y-1">
+              <div className="text-xs normal-case text-amber-400">Prompt: {currentEncounter.question}</div>
+              <AnswerBox
+                id={currentEncounter.type === 'blocker' ? `blocker-${currentSector}` : `enc-r${round}`}
+                type={currentEncounter.type === 'blocker' ? 'main' : 'encounter'}
+                question={currentEncounter.question}
+              />
             </div>
           )}
           <textarea

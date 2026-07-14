@@ -5,6 +5,7 @@ import {
   GraduationCap, Sparkles
 } from 'lucide-react';
 import { downloadStory } from '../utils/storyExport';
+import AnswerBox from '../components/AnswerBox';
 import { generateFullNpc, generateDangerousNpc, rollDangerousNpcGroup, rollFaction } from '../data/npcTables';
 import { generateSideQuest } from '../data/questTables';
 import { generateFoeEncounter } from '../data/characterTables';
@@ -215,7 +216,7 @@ export default function DataTab() {
           </h3>
           <div className="space-y-2">
             {mainQuest && (
-              <div className="border-l-2 border-red-500 pl-2">
+              <div className="border-l-2 border-red-500 pl-2 space-y-1">
                 <div className="text-white font-bold text-sm">MAIN: {mainQuest.goal}</div>
                 <div className="text-xs opacity-80 normal-case">{mainQuest.goalDesc}</div>
                 <div className="text-xs mt-1 text-red-400">
@@ -223,20 +224,38 @@ export default function DataTab() {
                   {mainQuest.blockerLocation ? ` (Square ${mainQuest.blockerLocation})` : ' (location unknown)'}
                   {' '}• {mainQuest.status}
                 </div>
+                <AnswerBox
+                  id="main-goal"
+                  type="main"
+                  question="Why does this goal matter to you, and what does success look like?"
+                  showQuestion
+                  placeholder="Tap to write your character's stake in this quest…"
+                />
               </div>
             )}
             {activeQuests.map((q, i) => (
-              <div key={i} className="border-l-2 border-dashed border-[#14FF00] pl-2 flex justify-between gap-2">
-                <div>
-                  <div className="text-white font-bold text-sm">[{q.goalType}] <span className="normal-case">{q.goal}</span></div>
-                  <div className="text-xs opacity-80">Sq.{q.location} • Reward: {q.reward}{q.giver ? ` • For ${q.giver}` : ''}</div>
+              <div key={i} className="border-l-2 border-dashed border-[#14FF00] pl-2 space-y-1">
+                <div className="flex justify-between gap-2">
+                  <div>
+                    <div className="text-white font-bold text-sm">[{q.goalType}] <span className="normal-case">{q.goal}</span></div>
+                    <div className="text-xs opacity-80">Sq.{q.location} • Reward: {q.reward}{q.giver ? ` • For ${q.giver}` : ''}</div>
+                  </div>
+                  <button
+                    onClick={() => { setSideQuestStatus(sideQuests.indexOf(q), 'Abandoned'); }}
+                    className="text-[10px] border border-red-500/50 text-red-400 px-1 self-start hover:bg-red-500 hover:text-black"
+                  >
+                    DROP
+                  </button>
                 </div>
-                <button
-                  onClick={() => { setSideQuestStatus(sideQuests.indexOf(q), 'Abandoned'); }}
-                  className="text-[10px] border border-red-500/50 text-red-400 px-1 self-start hover:bg-red-500 hover:text-black"
-                >
-                  DROP
-                </button>
+                {q.questions && (
+                  <AnswerBox
+                    id={`sq-${sideQuests.indexOf(q)}`}
+                    type="side"
+                    question={q.questions}
+                    showQuestion
+                    placeholder="Tap to answer this quest's prompt…"
+                  />
+                )}
               </div>
             ))}
             {doneQuests.map((q, i) => (

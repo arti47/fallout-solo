@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { HelpCircle, X } from 'lucide-react';
 import DiceRoller from './dice/DiceRoller';
+import AnswerBox from './AnswerBox';
 import { useGameState } from '../store/gameState';
 import { sfx } from '../utils/sound';
 
@@ -43,8 +44,8 @@ export default function OracleWidget() {
     deciding: number;
     probability: Probability;
     cheated: boolean;
+    questionId: string;
   } | null>(null);
-  const [journalNote, setJournalNote] = useState('');
 
   const { appendJournal, luck, updateLuck } = useGameState();
 
@@ -54,8 +55,7 @@ export default function OracleWidget() {
     const { isYes, deciding } = decide(activeProbability.name, rolls);
     if (isYes) sfx.success(); else sfx.failure();
     appendJournal(`Oracle (${activeProbability.name}): rolled ${rolls.join(', ')} → ${isYes ? 'YES' : 'NO'}`);
-    setResult({ isYes, rolls, deciding, probability: activeProbability, cheated: false });
-    setJournalNote('');
+    setResult({ isYes, rolls, deciding, probability: activeProbability, cheated: false, questionId: `oracle-${Date.now()}` });
     setActiveProbability(null);
   };
 
@@ -79,9 +79,6 @@ export default function OracleWidget() {
   };
 
   const handleClose = () => {
-    if (journalNote.trim()) {
-      appendJournal(`> ${journalNote.trim()}`);
-    }
     setResult(null);
   };
 
@@ -133,13 +130,13 @@ export default function OracleWidget() {
               </button>
             )}
 
-            <div className="mb-6">
-              <input
-                type="text"
-                value={journalNote}
-                onChange={(e) => setJournalNote(e.target.value)}
-                placeholder="Add optional journal note..."
-                className="w-full bg-transparent border border-[#14FF00] p-2 text-white outline-none focus:bg-[#051a05]"
+            <div className="mb-6 text-left">
+              <AnswerBox
+                id={result.questionId}
+                type="oracle"
+                question={`Oracle (${result.probability.name}) → ${result.isYes ? 'YES' : 'NO'}. What did you ask, and what does this answer mean for your story?`}
+                showQuestion
+                placeholder="Tap to record your question and what the answer means…"
               />
             </div>
 

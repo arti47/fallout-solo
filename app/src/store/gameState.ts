@@ -88,6 +88,23 @@ export interface TrackedSideQuest {
 /** The four stages of a Round (Chapter 5). */
 export type RoundStage = 'travel' | 'encounter' | 'action' | 'journal';
 
+/** Category of a structured journal answer, used for grouping/filtering. */
+export type JournalEntryType = 'main' | 'side' | 'encounter' | 'oracle';
+
+/** A player-written answer to an in-game prompt (main quest, side quest,
+ *  encounter hook, or Oracle question). Keyed by a stable `id` so re-opening
+ *  the same prompt edits the same entry rather than creating duplicates. */
+export interface JournalEntry {
+  id: string;
+  type: JournalEntryType;
+  question: string;
+  answer: string;
+  day: number;
+  round: number;
+  createdTs: number;
+  updatedTs: number;
+}
+
 export interface EncounterInfo {
   type: string;
   title: string;
@@ -121,6 +138,7 @@ export interface GameState {
   // World State
   currentSector: number;
   journalText: string;
+  journalEntries: JournalEntry[];
   sectorData: Record<number, SectorInfo>;
 
   // Round Engine (Chapter 5: Travel → Encounter → Take Action → Journal)
@@ -200,6 +218,10 @@ export interface GameState {
   setSideQuestStatus: (index: number, status: TrackedSideQuest['status']) => void;
   setJournalText: (text: string) => void;
   appendJournal: (text: string) => void;
+  /** Create or update a structured journal answer by stable id. An empty
+   *  answer removes the entry (nothing to keep). */
+  upsertJournalEntry: (entry: { id: string; type: JournalEntryType; question: string; answer: string }) => void;
+  removeJournalEntry: (id: string) => void;
   
   // Combat Actions
   startCombat: (foes: any[]) => void;
@@ -272,6 +294,7 @@ export const getInitialGameData = () => ({
   currentSector: 13,
   sectorData: { 13: { explored: true, scavengeAvailable: false } } as Record<number, SectorInfo>,
   journalText: "Entry 1: Left the Vault today. The sun is too bright.\n\n[SYSTEM] Ready to explore the Wasteland.\n",
+  journalEntries: [] as JournalEntry[],
 
   round: 1,
   day: 1,
@@ -449,6 +472,30 @@ export const useGameState = create<GameState>()(
         sideQuests: state.sideQuests.map((q, i) => i === index ? { ...q, status } : q)
       })),
       appendJournal: (text) => set((state) => ({ journalText: state.journalText + `\n[SYSTEM] ${text}\n` })),
+      upsertJournalEntry: ({ id, type, question, answer }) => set((state) => {
+        const trimmed = answer.trim();
+        const existing = state.journalEntries.find(e => e.id === id);
+        // Empty answer: drop any existing entry, otherwise no-op.
+        if (!trimmed) {
+          return existing ? { journalEntries: state.journalEntries.filter(e => e.id !== id) } : state;
+        }
+        const now = Date.now();
+        if (existing) {
+          return {
+            journalEntries: state.journalEntries.map(e =>
+              e.id === id ? { ...e, question, answer: trimmed, updatedTs: now } : e),
+          };
+        }
+        return {
+          journalEntries: [
+            ...state.journalEntries,
+            { id, type, question, answer: trimmed, day: state.day, round: state.round, createdTs: now, updatedTs: now },
+          ],
+        };
+      }),
+      removeJournalEntry: (id) => set((state) => ({
+        journalEntries: state.journalEntries.filter(e => e.id !== id),
+      })),
       
       startCombat: (foes) => set({ 
         combatActive: true, 
