@@ -10,6 +10,7 @@ const TYPE_META: Record<JournalEntryType, { label: string; text: string; border:
   side: { label: 'SIDE QUEST', text: 'text-amber-400', border: 'border-amber-400' },
   encounter: { label: 'ENCOUNTER', text: 'text-[#14FF00]', border: 'border-[#14FF00]' },
   oracle: { label: 'ORACLE', text: 'text-cyan-400', border: 'border-cyan-400' },
+  muse: { label: 'MUSE', text: 'text-amber-400', border: 'border-amber-400' },
 };
 
 interface AnswerBoxProps {

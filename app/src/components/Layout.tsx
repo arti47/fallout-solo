@@ -2,6 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { Activity, Backpack, Database, Map as MapIcon, Book, BookOpen, Compass } from 'lucide-react';
 import SkillTestModal from './SkillTestModal';
 import OracleWidget from './OracleWidget';
+import MuseWidget from './MuseWidget';
 import DeathModal from './DeathModal';
 import TutorialOverlay from './TutorialOverlay';
 import { useGameState } from '../store/gameState';
@@ -42,6 +43,7 @@ export default function Layout() {
       {/* Global Action Widgets */}
       <SkillTestModal />
       <OracleWidget />
+      <MuseWidget />
       <TutorialOverlay />
 
       {/* Bottom Navigation Bar */}
