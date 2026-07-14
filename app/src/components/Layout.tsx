@@ -46,19 +46,19 @@ export default function Layout() {
 
       {/* Bottom Navigation Bar */}
       <nav className="border-t-2 border-[#14FF00] bg-black">
-        <ul className="flex justify-between items-center px-2 py-3">
+        <ul className="flex items-stretch px-1 py-2">
           {navItems.map((item) => (
-            <li key={item.name} className="flex-1 text-center">
+            <li key={item.name} className="flex-1 min-w-0 text-center">
               <NavLink
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex flex-col items-center p-2 rounded transition-colors ${
+                  `flex flex-col items-center px-0.5 py-1.5 rounded transition-colors ${
                     isActive ? 'bg-[#14FF00] text-black' : 'text-[#14FF00] hover:bg-[#051A05]'
                   }`
                 }
               >
-                <item.icon size={24} className="mb-1" />
-                <span className="text-sm uppercase tracking-wider">{item.name}</span>
+                <item.icon size={20} className="mb-1 shrink-0" />
+                <span className="text-[11px] uppercase leading-none truncate max-w-full">{item.name}</span>
               </NavLink>
             </li>
           ))}
