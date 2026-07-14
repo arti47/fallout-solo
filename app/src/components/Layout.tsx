@@ -8,7 +8,7 @@ import TutorialOverlay from './TutorialOverlay';
 import { useGameState } from '../store/gameState';
 
 export default function Layout() {
-  const { hp, maxHp, rads, ap, maxAp, luck, maxLuck } = useGameState();
+  const { hp, maxHp, rads, ap, maxAp, luck, maxLuck, combatActive } = useGameState();
 
   const navItems = [
     { name: 'Round', path: '/round', icon: Compass },
@@ -40,10 +40,13 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* Global Action Widgets */}
-      <SkillTestModal />
-      <OracleWidget />
-      <MuseWidget />
+      {/* Global Action Widgets. The floating Skill Test / Oracle / Muse buttons
+          are hidden during combat — combat is a focused takeover with its own
+          rollers, and these FABs (bottom-left and bottom-right) would otherwise
+          sit on top of the combat action buttons. */}
+      {!combatActive && <SkillTestModal />}
+      {!combatActive && <OracleWidget />}
+      {!combatActive && <MuseWidget />}
       <TutorialOverlay />
 
       {/* Bottom Navigation Bar */}
