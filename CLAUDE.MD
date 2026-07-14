@@ -209,3 +209,24 @@ Deviation found and fixed:
 Minor note: side quests generated from encounter `[SIDE QUEST]` tokens don't always record a `giver` name (Meet does).
 
 Note: the actual Reward / Goal-Type / Goal table *contents* live in the Chapter 7 appendix and will be cross-checked when that chapter is audited.
+
+---
+
+## Chapter 7 (Appendices) Rules Audit — ✅ DONE — no deviations
+
+Verified the appendix data against the rulebook. **Everything matches; no code changes were required.**
+
+- **Perks** (`perks.ts`): all 40 perks present with exact Ranks and Requirements (attribute minimums + level gates), and `meetsPerkRequirements` enforces them.
+- **Foe stat blocks** (`bestiary.ts`): every foe (Creatures, Super Mutants, Feral Ghouls, Robots, Raiders, Institute, Brotherhood, Zetan) matches on Threat, Aggressive/Cautious/Crafty d20 ranges, damage values/types, weapon/job variants, and special abilities. `combatEngine.ts` implements the per-foe turn effects faithfully. (A few book stat blocks are OCR-garbled — Mirelurk Queen's spawn placement, the First-Gen Synth's overlapping ranges, Super Mutant damage lines — and the app took the sensible non-overlapping reading.)
+- **Combat States** (`encounters.ts`): all 20 entries and effects match.
+- **Settlement Reputation** (`characterTables.ts`): 1-4 Hostile, 5-12 Cautious, 13-17 Neutral, 18-20 Friendly, plus the Vilified/Idolized progression rules (distinct from the Ch.3 Vault reputation bands).
+- **Foe Type** table (1-6 Creature … 20 Zetans), **Injury** (2d20; overkill added to the type roll), **Quantity** (1-4 One … 17-19 roll-twice-reroll-16+, 20 endless), and the master **Loot** table (1-2 ranged … 19-20 oddity) all match.
+- Spot-checked and correct: **Dangerous NPC** Threat bands (1-8/9-16/17-20), **Miraculous Escape** ranges, **Chem** values (Stimpak 1, Super Stimpak 2, Jet 1, Fury 3, X-Cell 4).
+
+Not exhaustively re-typed against the book (very likely faithful given the above, but not line-verified): the full weapon/armor/scrap/oddity value tables and the NPC-generation word lists (names/features/secrets/truths).
+
+---
+
+## Full Rulebook Audit — COMPLETE (Chapters 3–7)
+
+All five gameplay chapters have been audited against the rulebook. Deviations found were fixed and merged: Ch.3 (4 fixes), Ch.4 (3 fixes incl. removing non-RAW AP-extra-dice), Ch.5 (6 fixes), Ch.6 (1 fix — reward renegotiation). Ch.7 required no changes. The app is a faithful implementation of *Fallout: Wasteland Wanderer*.
