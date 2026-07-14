@@ -11,6 +11,7 @@ import CodexTab from './pages/CodexTab';
 import RoundTab from './pages/RoundTab';
 import { useGameState } from './store/gameState';
 import GlobalModal from './components/GlobalModal';
+import UpdateToast from './components/UpdateToast';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { vault, mainQuest } = useGameState();
@@ -26,6 +27,7 @@ function App() {
   return (
     <>
       <GlobalModal />
+      <UpdateToast />
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
         <Route path="/" element={<Navigate to="/stats" replace />} />
