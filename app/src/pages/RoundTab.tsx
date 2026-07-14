@@ -1064,36 +1064,52 @@ export default function RoundTab() {
   };
 
   // Reads the encounter's own text and generates everything it references:
-  // foes (by faction), Dangerous NPCs, NPCs (+1 XP), Side Quests, Chems.
-  // Returns true if the scene implies Danger.
-  const autoPopulate = (enc: EncounterInfo): boolean => {
+  // foes (by faction), Dangerous NPCs, NPCs (+1 XP), Side Quests, Chems. As it
+  // generates, it records each token's concrete value so the encounter reads
+  // with real names ("A Raiders war-band…") instead of raw [FACTION]/[NPC]/[FOE]
+  // placeholders. Returns the resolved encounter (title/description substituted).
+  const autoPopulate = (enc: EncounterInfo): EncounterInfo => {
     const text = `${enc.title} ${enc.description}`.toUpperCase();
     const newExtras: string[] = [];
     let foes: FoeTemplate[] = [];
     let threat = enc.type === 'blocker';
     const journalLines: string[] = [];
+    // token regex → concrete replacement text.
+    const repl: { token: RegExp; value: string }[] = [];
 
-    const spawnFoes = (type?: FoeType) => {
+    const spawnFoes = (type?: FoeType, tokenRe?: RegExp) => {
       const gen = generateFoeEncounter(type);
       const parsed = gen.scenarios.flatMap(parseFoesFromScenario);
-      foes = [...foes, ...(parsed.length ? parsed : [getRandomFoe()])];
+      const list = parsed.length ? parsed : [getRandomFoe()];
+      foes = [...foes, ...list];
       const line = `Foes (${gen.foeType}): ${gen.scenarios.join(' ')}`;
       newExtras.push(line);
       journalLines.push(line);
       threat = true;
+      if (tokenRe) repl.push({ token: tokenRe, value: [...new Set(list.map(f => f.name))].join(' & ') });
     };
 
-    if (/\[RAIDER/.test(text)) spawnFoes('Raiders');
-    if (/\[CREATURE/.test(text)) spawnFoes('Creature');
-    if (/\[SUPER MUTANT/.test(text)) spawnFoes('Super Mutants');
-    if (/\[ROBOT/.test(text)) spawnFoes('Robots');
-    if (/\[FOE/.test(text)) spawnFoes();
+    if (/\[RAIDER/.test(text)) spawnFoes('Raiders', /\[RAIDERS?\]/gi);
+    if (/\[CREATURE/.test(text)) spawnFoes('Creature', /\[CREATURES?\]/gi);
+    if (/\[SUPER MUTANT/.test(text)) spawnFoes('Super Mutants', /\[SUPER MUTANTS?\]/gi);
+    if (/\[ROBOT/.test(text)) spawnFoes('Robots', /\[ROBOTS?\]/gi);
+    if (/\[FOE/.test(text)) spawnFoes(undefined, /\[FOES?\]/gi);
+
+    if (/\[FACTION/.test(text)) {
+      const fac = rollFaction();
+      repl.push({ token: /\[FACTIONS?\]/gi, value: fac });
+      // A named faction in an encounter (e.g. a Siege) means a fight — generate
+      // its forces so Fight has real combatants and the scene is In Danger.
+      spawnFoes();
+      journalLines.push(`Faction involved: ${fac}.`);
+    }
 
     if (/\[DANGEROUS NPC/.test(text)) {
       const dnpc = generateDangerousNpc();
       const line = `Dangerous NPC: ${dnpc.name} (Threat ${dnpc.threat}) — ${dnpc.weapons} Special: ${dnpc.ability.name} [${dnpc.ability.faction}]`;
       newExtras.push(line);
       journalLines.push(line);
+      repl.push({ token: /\[DANGEROUS NPCS?\]/gi, value: dnpc.name });
       threat = true;
     }
     if (/\[NPC\]/.test(text)) {
@@ -1106,6 +1122,7 @@ export default function RoundTab() {
       const line = `NPC: ${npc.name} — ${npc.age} ${npc.demeanor} ${npc.profession} (${npc.faction}). (+1 XP)`;
       newExtras.push(line);
       journalLines.push(line);
+      repl.push({ token: /\[NPC\]/gi, value: npc.name });
     }
     if (/\[SIDE ?QUEST\]/.test(text)) {
       const quest = generateSideQuest(currentSector);
@@ -1117,6 +1134,7 @@ export default function RoundTab() {
       const line = `New Side Quest [${quest.goalType}]: ${quest.goal} (Sq.${quest.location}, Reward: ${quest.rewardName})`;
       newExtras.push(line);
       journalLines.push(line);
+      repl.push({ token: /\[SIDE ?QUESTS?\]/gi, value: 'a new Side Quest' });
     }
     if (/\[CHEM\]/.test(text)) {
       const chem = rollChem();
@@ -1124,13 +1142,25 @@ export default function RoundTab() {
       const line = `Found a Chem: ${chem.name}.`;
       newExtras.push(line);
       journalLines.push(line);
+      repl.push({ token: /\[CHEMS?\]/gi, value: chem.name });
     }
 
     setExtras(newExtras);
     setEncounterFoes(foes);
     setDangerChecks([threat, false, false]);
     if (journalLines.length > 0) appendJournal(journalLines.join('\n'));
-    return threat;
+
+    // Substitute the recorded tokens, then strip any leftover bracket tokens
+    // (e.g. [CONDITION], [INJURY]) down to plain words so none show raw.
+    const resolve = (s: string) => {
+      let out = s;
+      for (const { token, value } of repl) out = out.replace(token, value);
+      return out.replace(/\[([A-Za-z][A-Za-z ]*?)\]/g, (_m, w) => {
+        const word = String(w).toLowerCase();
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      });
+    };
+    return { ...enc, title: resolve(enc.title), description: resolve(enc.description) };
   };
 
   // Auto-generate the Encounter when its stage begins (effect, not render,
@@ -1138,9 +1168,9 @@ export default function RoundTab() {
   useEffect(() => {
     if (stage === 'encounter' && !currentEncounter) {
       const enc = generateEncounter();
-      setEncounter(enc);
-      appendJournal(`Encounter — ${enc.title}: ${enc.description}`);
-      autoPopulate(enc);
+      const resolved = autoPopulate(enc);
+      setEncounter(resolved);
+      appendJournal(`Encounter — ${resolved.title}: ${resolved.description}`);
       setDangerOverride(null);
       setSceneMenuOpen(false);
       setPoddsRoll(null);
@@ -1177,9 +1207,9 @@ export default function RoundTab() {
       if (luck < 1) { setPoddsRoll(null); return; }
       updateLuck(-1);
       const enc = encounterInfoFromRoll(poddsRoll);
-      setEncounter(enc);
-      appendJournal(`Played the Odds (1 LP): shifted the Encounter roll ${encounterRoll} → ${poddsRoll} — ${enc.title}`);
-      autoPopulate(enc);
+      const resolved = autoPopulate(enc);
+      setEncounter(resolved);
+      appendJournal(`Played the Odds (1 LP): shifted the Encounter roll ${encounterRoll} → ${poddsRoll} — ${resolved.title}`);
       setEncounterRoll(poddsRoll);
       setDangerOverride(null);
     }

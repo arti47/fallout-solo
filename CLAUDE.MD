@@ -172,6 +172,13 @@ A d100 "meaning table" inspiration roller for when the story stalls — a second
 - **Journal wiring**: new `JournalEntryType` value `'muse'` (amber `MUSE` tag) added to `gameState.ts`, `AnswerBox` and `JournalTab` `TYPE_META`, plus a **Muse** filter chip in `JournalTab`.
 - Mounted globally in `Layout.tsx` alongside `OracleWidget`. Verified headless at 390px: FAB stacks cleanly above the Oracle, roll→shuffle→result→re-roll→record→Journal-Muse-filter all work, no horizontal overflow.
 
+### Combat FAB overlap + encounter token leak fixes — ✅ DONE
+
+Two reported bugs, fixed together:
+
+- **Combat controls covered by floating buttons.** The global Skill Test (bottom-right), Oracle (bottom-left), and the new Muse (bottom-left, stacked above the Oracle) FABs are `fixed`/`z-40` and rendered by `Layout` on *every* route — including while `CombatView` is up. On phones they sat directly on top of the combat action buttons (the Muse covered **Attack**, the Oracle covered the weapon chip, the Skill Test covered **Flee**), so tapping an action did nothing / opened the wrong widget — the "combat roller is stuck" report. Fix: `Layout.tsx` now hides all three FABs while `combatActive` (`{!combatActive && <…/>}`). Combat is a focused takeover with its own rollers, so the helpers aren't needed there. Verified by screenshot at 390×667 — the action row and dice reveal are now unobstructed.
+- **Encounter text showed raw `[FACTION]` / `[NPC]` / `[FOE]` tokens.** `autoPopulate` (RoundTab) generated the referenced entities but left the bracket placeholders sitting in the displayed description, and `[FACTION]` was never resolved at all. Fix: as it generates each entity it now records a token→value replacement (foe names per category, the NPC's name, the Dangerous NPC's name, the Chem name, a rolled faction for `[FACTION]` — which also spawns that faction's forces and sets Danger, e.g. a Siege — and "a new Side Quest"), then substitutes them into the encounter title/description and strips any leftover bracket tokens (`[CONDITION]`, `[INJURY]`) to plain words. `autoPopulate` now returns the resolved `EncounterInfo`; both call sites (the encounter effect and Play-the-Odds) set that. Verified headless: real encounter→Fight flow shows zero raw tokens.
+
 ### Installable PWA (Add to Home Screen) — ✅ DONE
 
 The app opened as a plain browser bookmark on phones because it had no web app manifest. Added full install support so it launches standalone (no browser chrome):
