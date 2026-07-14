@@ -163,6 +163,16 @@ The game constantly poses narrative prompts, but the only place to write was one
 - **Journal tab** (`JournalTab.tsx`): rewritten as a **chronological timeline** (newest first) of all answered prompts with **filter chips** (All / Main / Side / Encounter / Oracle), each entry showing its colored category tag, Day/Round stamp, question, and an editable AnswerBox. The original free-form terminal log is kept below it.
 - Verified headless at 390px: tap opens the editor, Save persists to the store, the entry appears in the timeline, the type filter hides non-matching entries, and no horizontal overflow.
 
+### Installable PWA (Add to Home Screen) — ✅ DONE
+
+The app opened as a plain browser bookmark on phones because it had no web app manifest. Added full install support so it launches standalone (no browser chrome):
+
+- **`public/manifest.webmanifest`**: `display: standalone`, `start_url`/`scope` `"."` (relative → resolves to `/fallout-solo/` on GitHub Pages), portrait, `theme_color`/`background_color` `#051a05`, and icon set.
+- **Icons** (`public/`): `pwa-192.png`, `pwa-512.png` (purpose `any`), `pwa-maskable-512.png` (purpose `maskable`, content in the safe zone), and `apple-touch-icon.png` (180). Design is a glowing green atomic symbol on the dark terminal background — rendered from SVG via headless Chromium (no image tooling in the repo; the `scratch-*` source files are not committed).
+- **`index.html` head**: `<link rel="manifest">`, `theme-color`, `mobile-web-app-capable`, and the iOS-specific `apple-mobile-web-app-capable` / `-status-bar-style` / `-title` + `apple-touch-icon` (iOS Safari ignores the manifest for standalone, so these are required). Also added `viewport-fit=cover`.
+- Root-relative `href="/manifest.webmanifest"` etc. are rewritten to the `/fallout-solo/` base by Vite at build; the manifest's own paths are relative so they resolve under the subpath at runtime. Verified all five assets serve 200 with correct content-types (manifest as `application/manifest+json`).
+- Note: no service worker, so there's no auto-install prompt or offline caching — manual "Add to Home Screen" gives the standalone app, which is what was asked for. (A service worker could be added later for offline play + the install banner.)
+
 ---
 
 ## Chapter 3 (Character Creation) Rules Audit — ✅ DONE
