@@ -182,6 +182,13 @@ export const WASTELAND_ENCOUNTERS: EncounterEntry[] = [
 export const rollSettlementEncounter = (): EncounterEntry => SETTLEMENT_ENCOUNTERS[roll(20) - 1];
 export const rollWastelandEncounter = (): EncounterEntry => WASTELAND_ENCOUNTERS[roll(20) - 1];
 
+/** Look up an encounter by an explicit d20 result (1-20). Lets Play the Odds
+ *  adjust the roll rather than re-roll blindly (pg.94). */
+export const encounterAt = (isSettlement: boolean, n: number): EncounterEntry => {
+  const table = isSettlement ? SETTLEMENT_ENCOUNTERS : WASTELAND_ENCOUNTERS;
+  return table[Math.max(1, Math.min(20, n)) - 1];
+};
+
 // ===================== COMBAT STATES (pg.166-167) =====================
 export interface CombatState {
   name: string;

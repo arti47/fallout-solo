@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useGameState } from '../store/gameState';
 import type { Special } from '../store/gameState';
 import { getFoeByName, resolveVariant } from '../data/bestiary';
+import type { FoeTemplate } from '../data/bestiary';
 import { rollCombatStateEntry } from '../data/encounters';
 import { rollInjury } from '../data/characterTables';
 import { runSkillTest, rerollWorstDie } from '../utils/skillTest';
@@ -113,6 +114,15 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
   const spoils = useRef<string[]>([]);
   const startInjuries = useRef(useGameState.getState().injuries.length);
   const startHp = useRef(hp);
+  // Foes defeated this fight — looted once at the end (pg.99: loot once you are
+  // no longer In Danger), not at the moment of each defeat.
+  const defeatedFoes = useRef<FoeTemplate[]>([]);
+  // Oppose Additional-Success spends (pg.138), offered after a winning Oppose.
+  const [pendingAdditional, setPendingAdditional] = useState<{ targetThreat: number; explosive: boolean } | null>(null);
+  const [addClaimed, setAddClaimed] = useState<string[]>([]);
+  const [choosingNext, setChoosingNext] = useState(false);
+  /** Foe forced to act next by the "choose which Foe acts next" Additional Success. */
+  const forcedNextActor = useRef<string | null>(null);
 
   const turnPointer = useRef(0);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -279,9 +289,16 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
   const runFoeTurn = () => {
     const foes = useGameState.getState().activeFoes;
     if (foes.length === 0) return;
-    const ordered = [...foes].sort((a, b) => b.currentThreat - a.currentThreat);
-    const actor = ordered[turnPointer.current % ordered.length];
-    turnPointer.current += 1;
+    // Threat order, highest first; ties broken randomly (pg.98) via each foe's
+    // random id, which gives a stable random order for the fight.
+    let actor = foes.find(f => f.id === forcedNextActor.current);
+    if (actor) {
+      forcedNextActor.current = null;
+    } else {
+      const ordered = [...foes].sort((a, b) => b.currentThreat - a.currentThreat || a.id.localeCompare(b.id));
+      actor = ordered[turnPointer.current % ordered.length];
+      turnPointer.current += 1;
+    }
 
     addCombatLog(`--- ${actor.template.name}'s Turn ---`);
     const acts = actor.buffs.includes('Jet') ? 2 : 1;
@@ -324,12 +341,27 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
   };
 
   // ================= END OF FIGHT =================
+  /** Loot every foe defeated this fight, once, now that you are no longer In
+   *  Danger (pg.99), then show the summary. */
+  const finishCombat = (kind: EndKind, toStage: 'action' | 'journal') => {
+    defeatedFoes.current.forEach(t => {
+      const loot = lootFoe(t);
+      loot.items.forEach(item => {
+        addGear(item);
+        spoils.current.push(`${item.quantity > 1 ? `${item.quantity}x ` : ''}${item.name}`);
+      });
+      addCombatLog(loot.log);
+    });
+    defeatedFoes.current = [];
+    setEndState({ kind, toStage });
+  };
+
   const showVictory = () => {
     sfx.levelUp();
     addCombatLog('All foes defeated! The dust settles.');
     appendJournal('Combat won — every foe defeated or driven off.');
     setPhase('choose');
-    setEndState({ kind: 'victory', toStage: 'action' });
+    finishCombat('victory', 'action');
   };
 
   const finishExit = () => {
@@ -354,12 +386,8 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
       return;
     }
     sfx.defeat();
-    const loot = lootFoe(foe.template);
-    loot.items.forEach(item => {
-      addGear(item);
-      spoils.current.push(`${item.quantity > 1 ? `${item.quantity}x ` : ''}${item.name}`);
-    });
-    addCombatLog(loot.log);
+    defeatedFoes.current.push(foe.template);
+    addCombatLog(`${foe.template.name} is defeated.`);
     removeFoe(foe.id);
 
     if (lowMorale) {
@@ -528,7 +556,7 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
       if (outcome.passed) {
         addCombatLog('You talk them down. The encounter is Safe — foes are unfriendly, but not hostile.');
         appendJournal('De-escalated a fight without bloodshed.');
-        setEndState({ kind: 'talk', toStage: 'action' });
+        finishCombat('talk', 'action');
         return;
       }
       addCombatLog('They are NOT in the mood to talk — TWO foes act!');
@@ -550,14 +578,14 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
       if (outcome.passed) {
         addCombatLog('You slip away! Journal the round, then travel on.');
         appendJournal('Retreated from combat, living to fight another day.');
-        setEndState({ kind: 'flee', toStage: 'journal' });
+        finishCombat('flee', 'journal');
         return;
       }
       addCombatLog('Caught! Foes act before you break free…');
       foes.forEach(() => runFoeTurn());
       addCombatLog('Battered but alive, you finally escape.');
       appendJournal('Retreated from combat — barely.');
-      setEndState({ kind: 'flee', toStage: 'journal' });
+      finishCombat('flee', 'journal');
       return;
     }
 
@@ -565,7 +593,65 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
       setPendingComplication(complicationOptions);
       return;
     }
+    // A winning Oppose with foes still standing and AP to spend: offer the
+    // action's Additional Successes (pg.138) before the foes act.
+    if (action === 'Oppose' && outcome.passed &&
+        useGameState.getState().activeFoes.length > 0 && useGameState.getState().ap >= 1) {
+      setAddClaimed([]);
+      setChoosingNext(false);
+      setPendingAdditional({ targetThreat: difficulty, explosive: ['Big Guns', 'Throwing'].includes(sol.skill) });
+      return;
+    }
     concludePlayerTurn();
+  };
+
+  // ================= OPPOSE ADDITIONAL SUCCESSES (pg.138) =================
+  const additionalReduceThreat = () => {
+    if (ap < 1 || addClaimed.includes('threat')) return;
+    const others = [...useGameState.getState().activeFoes].sort((a, b) => b.currentThreat - a.currentThreat);
+    const target = others[0];
+    if (!target) return;
+    updateAp(-1);
+    updateFoeThreat(target.id, target.currentThreat > 1 ? -1 : 0);
+    addCombatLog(`Additional Success: ${target.template.name}'s Threat is reduced by 1 (min 1).`);
+    setAddClaimed(c => [...c, 'threat']);
+  };
+  const additionalCombatState = () => {
+    if (ap < 1 || addClaimed.includes('state')) return;
+    updateAp(-1);
+    const st = rollCombatStateEntry();
+    setCombatState(`${st.name}: ${st.description}`);
+    addCombatLog(`Additional Success: a new Combat State — ${st.name}.`);
+    setAddClaimed(c => [...c, 'state']);
+  };
+  const additionalChooseNext = () => {
+    if (ap < 1 || addClaimed.includes('next')) return;
+    updateAp(-1);
+    setChoosingNext(true);
+    setAddClaimed(c => [...c, 'next']);
+    addCombatLog('Additional Success: tap a foe to make it act next.');
+  };
+  const additionalExplosiveDefeat = () => {
+    if (!pendingAdditional || ap < 1) return;
+    const victim = [...useGameState.getState().activeFoes]
+      .filter(f => f.currentThreat < pendingAdditional.targetThreat)
+      .sort((a, b) => b.currentThreat - a.currentThreat)[0];
+    if (!victim) return;
+    updateAp(-1);
+    addCombatLog(`Additional Success (Explosive): ${victim.template.name} is caught in the blast and Defeated.`);
+    defeatFoe(victim as CombatFoeState, true);
+  };
+  const doneAdditional = () => {
+    setPendingAdditional(null);
+    setChoosingNext(false);
+    if (useGameState.getState().activeFoes.length === 0) { showVictory(); return; }
+    concludePlayerTurn();
+  };
+  const pickNextFoe = (id: string) => {
+    forcedNextActor.current = id;
+    setChoosingNext(false);
+    const f = useGameState.getState().activeFoes.find(x => x.id === id);
+    if (f) addCombatLog(`${f.template.name} will act next.`);
   };
 
   const applyComplication = (option: string) => {
@@ -657,20 +743,22 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
       {/* ---------- FOES ---------- */}
       <div className="space-y-1.5">
         {foes.map(foe => {
-          const isTargetable = phase === 'choose' && !endState && selectedAction === 'Oppose';
+          const isTargetable = phase === 'choose' && !endState && !pendingAdditional && selectedAction === 'Oppose';
+          const tappable = isTargetable || choosingNext;
           return (
             <button
               key={foe.id}
-              disabled={!isTargetable}
-              onClick={() => beginAction('Oppose', foe.id)}
+              disabled={!tappable}
+              onClick={() => choosingNext ? pickNextFoe(foe.id) : beginAction('Oppose', foe.id)}
               className={`w-full border rounded-sm p-2.5 flex justify-between items-center text-left transition-all
-                ${flashFoeId === foe.id ? 'border-red-500 bg-red-500/30' : 'border-[#14FF00]/60'}
-                ${isTargetable ? 'hover:border-red-500 hover:bg-red-500/10 cursor-pointer active:scale-[0.99]' : 'opacity-90'}`}
+                ${flashFoeId === foe.id ? 'border-red-500 bg-red-500/30' : choosingNext ? 'border-amber-400/70' : 'border-[#14FF00]/60'}
+                ${tappable ? 'hover:border-red-500 hover:bg-red-500/10 cursor-pointer active:scale-[0.99]' : 'opacity-90'}`}
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-sm truncate">{foe.template.name}</span>
                   {isTargetable && <Crosshair size={13} className="text-red-500 shrink-0" />}
+                  {choosingNext && <span className="text-[10px] text-amber-400 shrink-0">act next?</span>}
                 </div>
                 {foe.buffs.length > 0 && (
                   <div className="text-[10px] text-amber-400 normal-case mt-0.5">{foe.buffs.join(' • ')}</div>
@@ -766,6 +854,44 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
             >
               <Dices size={16} /> {ACTION_META[selectedAction].label}
               {selectedAction === 'Slaughter' && ` (diff ${Math.max(...foes.map(f => f.currentThreat)) + foes.length})`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ---------- OPPOSE ADDITIONAL SUCCESSES (pg.138) ---------- */}
+      {pendingAdditional && (
+        <div className="border border-amber-400/60 rounded-sm p-3 space-y-2 bg-[#051a05]">
+          <div className="text-sm font-bold text-amber-400 flex items-center gap-2">
+            <Sparkles size={16} /> Additional Successes — spend AP ({ap} left)
+          </div>
+          {choosingNext ? (
+            <div className="text-xs normal-case text-amber-400 animate-pulse">Tap a foe above to make it act next…</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-1">
+              <button onClick={additionalReduceThreat} disabled={ap < 1 || addClaimed.includes('threat') || foes.length < 2}
+                className="text-left text-xs border border-amber-400/40 rounded-sm p-2 hover:bg-amber-400 hover:text-black disabled:opacity-30 normal-case">
+                {addClaimed.includes('threat') ? '✓ ' : ''}Reduce a nearby foe's Threat by 1 (1 AP)
+              </button>
+              <button onClick={additionalCombatState} disabled={ap < 1 || addClaimed.includes('state')}
+                className="text-left text-xs border border-amber-400/40 rounded-sm p-2 hover:bg-amber-400 hover:text-black disabled:opacity-30 normal-case">
+                {addClaimed.includes('state') ? '✓ ' : ''}Gain a new Combat State (1 AP)
+              </button>
+              <button onClick={additionalChooseNext} disabled={ap < 1 || addClaimed.includes('next') || foes.length < 2}
+                className="text-left text-xs border border-amber-400/40 rounded-sm p-2 hover:bg-amber-400 hover:text-black disabled:opacity-30 normal-case">
+                {addClaimed.includes('next') ? '✓ ' : ''}Choose which foe acts next (1 AP)
+              </button>
+              {pendingAdditional.explosive && foes.some(f => f.currentThreat < pendingAdditional.targetThreat) && (
+                <button onClick={additionalExplosiveDefeat} disabled={ap < 1}
+                  className="text-left text-xs border border-amber-400/40 rounded-sm p-2 hover:bg-amber-400 hover:text-black disabled:opacity-30 normal-case">
+                  Explosive: defeat a lower-Threat foe (1 AP each)
+                </button>
+              )}
+            </div>
+          )}
+          {!choosingNext && (
+            <button onClick={doneAdditional} className="w-full border-2 border-[#14FF00] rounded-sm p-2 font-bold hover:bg-[#14FF00] hover:text-black">
+              Done — foes act
             </button>
           )}
         </div>

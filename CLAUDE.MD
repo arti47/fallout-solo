@@ -230,3 +230,13 @@ Not exhaustively re-typed against the book (very likely faithful given the above
 ## Full Rulebook Audit — COMPLETE (Chapters 3–7)
 
 All five gameplay chapters have been audited against the rulebook. Deviations found were fixed and merged: Ch.3 (4 fixes), Ch.4 (3 fixes incl. removing non-RAW AP-extra-dice), Ch.5 (6 fixes), Ch.6 (1 fix — reward renegotiation). Ch.7 required no changes. The app is a faithful implementation of *Fallout: Wasteland Wanderer*.
+
+### Minor procedural items — all closed out
+The remaining small deviations flagged during the audit are now resolved:
+- **Foe Threat ties** are broken randomly (via each foe's random id as a stable tiebreaker) in `runFoeTurn` (pg.98).
+- **Loot timing**: defeated foes are collected during the fight and looted once at the end (victory/talk/flee), matching "loot once you are no longer In Danger" (pg.99) — `defeatedFoes` + `finishCombat`.
+- **Oppose Additional Successes** (pg.138) are now offered after a winning Oppose with AP to spend: reduce a nearby foe's Threat, gain a Combat State, choose which foe acts next (`forcedNextActor`), and — with an explosive weapon — defeat lower-Threat foes.
+- **Irradiated "after any Safe Action"** now fires for no-test actions too (Rest, Level Up on a real level, Clear Blocker, Complete Side Quest) via a shared `chargeIrradiatedSafeAction` on the completion callbacks.
+- **Play the Odds** (pg.94) is now a true ±Luck adjustment of the encounter roll (`encounterAt`, a preview stepper bounded to the Luck Attribute, spending the LP only if the result changes) rather than a blind re-roll.
+
+Remaining known simplification (intentional): the AP re-roll auto-picks the worst die rather than letting you choose which die; Play the Odds is wired to the encounter roll specifically, not every table roll in the app.
