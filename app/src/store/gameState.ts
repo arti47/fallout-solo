@@ -89,11 +89,12 @@ export interface TrackedSideQuest {
 export type RoundStage = 'travel' | 'encounter' | 'action' | 'journal';
 
 /** Category of a structured journal answer, used for grouping/filtering. */
-export type JournalEntryType = 'main' | 'side' | 'encounter' | 'oracle';
+export type JournalEntryType = 'main' | 'side' | 'encounter' | 'oracle' | 'muse';
 
 /** A player-written answer to an in-game prompt (main quest, side quest,
- *  encounter hook, or Oracle question). Keyed by a stable `id` so re-opening
- *  the same prompt edits the same entry rather than creating duplicates. */
+ *  encounter hook, Oracle question, or a Wanderer's Muse inspiration roll).
+ *  Keyed by a stable `id` so re-opening the same prompt edits the same entry
+ *  rather than creating duplicates. */
 export interface JournalEntry {
   id: string;
   type: JournalEntryType;
