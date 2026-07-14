@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Search } from 'lucide-react';
 import { CODEX_CHAPTERS, searchCodex } from '../data/codex';
 import type { CodexChapter } from '../data/codex';
@@ -11,6 +11,21 @@ type Block =
 
 /** Strips markdown emphasis for plain rendering. */
 const plain = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').trim();
+
+/** Tracks whether the viewport is narrow (phones), so wide tables can be
+ *  re-rendered as stacked label/value cards instead of clipping columns. */
+const useNarrow = () => {
+  const [narrow, setNarrow] = useState(
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 640px)').matches : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+};
 
 /** Parses a chapter into structured blocks: headings, tables, lists, and
  *  paragraphs (consecutive lines merged so OCR line-wrapping reads cleanly). */
@@ -75,6 +90,7 @@ const parseChapter = (content: string): Block[] => {
 /** Renders a chapter as styled Pip-Boy text with real tables. */
 function ChapterContent({ content }: { content: string }) {
   const blocks = useMemo(() => parseChapter(content), [content]);
+  const narrow = useNarrow();
   return (
     <div className="space-y-3 text-sm leading-relaxed normal-case">
       {blocks.map((block, i) => {
@@ -84,6 +100,25 @@ function ChapterContent({ content }: { content: string }) {
             if (block.level === 3) return <h3 key={i} className="text-base font-bold uppercase mt-4 text-white">{block.text}</h3>;
             return <h4 key={i} className="font-bold mt-3 text-white">{block.text}</h4>;
           case 'table':
+            // On phones, a multi-column table clips its last columns even inside
+            // an overflow-x wrapper. Render each row as a stacked label/value
+            // card so every cell stays on-screen and wraps.
+            if (narrow && block.header.length > 2) {
+              return (
+                <div key={i} className="space-y-2">
+                  {block.rows.map((row, r) => (
+                    <div key={r} className="border border-[#14FF00]/40 divide-y divide-[#14FF00]/20">
+                      {row.map((cell, c) => (
+                        <div key={c} className="flex gap-2 p-1.5 text-xs">
+                          <span className="shrink-0 basis-1/3 uppercase font-bold text-[#14FF00]/80">{plain(block.header[c] ?? '')}</span>
+                          <span className="flex-1 break-words">{plain(cell)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
             return (
               <div key={i} className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
@@ -98,7 +133,7 @@ function ChapterContent({ content }: { content: string }) {
                     {block.rows.map((row, r) => (
                       <tr key={r} className={r % 2 === 0 ? '' : 'bg-[#14FF00]/5'}>
                         {row.map((cell, c) => (
-                          <td key={c} className="border border-[#14FF00]/30 p-1.5 align-top">{plain(cell)}</td>
+                          <td key={c} className="border border-[#14FF00]/30 p-1.5 align-top break-words">{plain(cell)}</td>
                         ))}
                       </tr>
                     ))}

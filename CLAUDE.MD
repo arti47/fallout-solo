@@ -148,6 +148,7 @@ Reworked the encounter and combat experience into a single guided, fewer-tap flo
 - **Encounter stage**: the 3-checkbox "Are you in Danger?" panel is replaced by an **auto danger verdict** (from the existing token auto-detection) with a one-tap override; the GM generators (Generate Foes/NPC/Dangerous NPC/Play the Odds) collapse into an **"Add to scene"** menu; a prominent **Fight** plus **Talk Down / Outwit / Flee** peers (the non-Fight peers jump to the Action stage with that dangerous action pre-opened via `enterDangerAction`).
 - **Combat tab retired from nav**: `Layout.tsx` no longer lists Combat; the `/combat` route remains as a hidden quick-skirmish sandbox (`CombatTab.tsx` → `CombatView`).
 - **Readability**: larger base fonts and tap targets throughout the new components while keeping the Pip-Boy/CRT aesthetic. Verified in a headless-Chromium smoke test (seed character → attack → dice reveal → foe turn) with no runtime errors.
+- **Mobile Codex tables** (`CodexTab.tsx`): wide multi-column rulebook tables clipped their last columns on phones even inside an `overflow-x-auto` wrapper. A `useNarrow()` matchMedia hook (`<=640px`) now re-renders each row as a stacked label/value card (with `break-words`) on narrow viewports, keeping the real `<table>` on wide screens. Fixes the "Codex tab mostly outside the screen" overflow.
 
 Audience target for this pass: newcomer-friendly and works on phone + desktop.
 
