@@ -171,7 +171,7 @@ export default function CodexTab() {
           <ChevronLeft size={16} /> Codex Index
         </button>
         <h2 className="text-xl uppercase tracking-widest border-b-2 border-[#14FF00] pb-1">
-          Ch.{activeChapter.number}: {activeChapter.title}
+          {activeChapter.label ?? `Ch.${activeChapter.number}`}: {activeChapter.title}
         </h2>
         <ChapterContent content={activeChapter.content} />
       </div>
@@ -204,7 +204,7 @@ export default function CodexTab() {
               onClick={() => setActiveChapter(chapter)}
               className="block w-full text-left border border-[#14FF00]/60 p-3 hover:bg-[#14FF00]/10 transition-colors"
             >
-              <div className="font-bold uppercase">Ch.{chapter.number}: {chapter.title}</div>
+              <div className="font-bold uppercase">{chapter.label ?? `Ch.${chapter.number}`}: {chapter.title}</div>
               <div className="text-xs opacity-70 mt-1">{excerpt}</div>
             </button>
           ))}
@@ -217,9 +217,13 @@ export default function CodexTab() {
           <button
             key={chapter.id}
             onClick={() => setActiveChapter(chapter)}
-            className="block w-full text-left border-2 border-[#14FF00] p-4 hover:bg-[#14FF00] hover:text-black transition-colors group"
+            className={`block w-full text-left border-2 p-4 transition-colors group ${
+              chapter.number === 0
+                ? 'border-amber-400 text-amber-400 hover:bg-amber-400 hover:text-black'
+                : 'border-[#14FF00] hover:bg-[#14FF00] hover:text-black'
+            }`}
           >
-            <div className="font-bold uppercase tracking-wider">Chapter {chapter.number}: {chapter.title}</div>
+            <div className="font-bold uppercase tracking-wider">{chapter.label ?? `Chapter ${chapter.number}`}: {chapter.title}</div>
             <div className="text-xs opacity-70 group-hover:opacity-90 mt-1">{chapter.summary}</div>
           </button>
         ))}

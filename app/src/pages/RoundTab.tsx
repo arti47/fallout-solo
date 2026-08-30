@@ -21,8 +21,11 @@ import LevelUpModal from '../components/LevelUpModal';
 import AnswerBox from '../components/AnswerBox';
 import CombatView from '../components/CombatView';
 import type { PlayerCombatAction } from '../components/CombatView';
+import EpilogueModal from '../components/EpilogueModal';
+import type { EpilogueKind } from '../components/EpilogueModal';
 import { sfx } from '../utils/sound';
-import { Footprints, Zap, Swords, Book, ChevronRight, Dices, MessageCircle, Brain, Wind, PlusCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Footprints, Zap, Swords, Book, ChevronRight, Dices, MessageCircle, Brain, Wind, PlusCircle, AlertTriangle, ShieldCheck, Compass, Flag, HelpCircle, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const IMPASSABLE = [3, 8, 21, 24];
 const EDGE_SQUARES = [1, 2, 4, 5, 6, 10, 11, 15, 16, 20, 22, 23, 25];
@@ -868,7 +871,7 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
 export default function RoundTab() {
   const {
     round, day, stage, inDanger, currentEncounter, currentSector, sectorData,
-    supplies, hp, luck, xp, mainQuest, scavengedThisRound, sideQuests,
+    supplies, hp, luck, xp, mainQuest, scavengedThisRound, sideQuests, journalEntries,
     setStage, setDanger, setEncounter, completeRound, setCurrentSector,
     updateSectorData, updateSupplies, updateHp, updateRads, updateLuck, updateXp,
     appendJournal, setMainQuest, level, setSideQuestStatus,
@@ -895,6 +898,11 @@ export default function RoundTab() {
   const [encounterRoll, setEncounterRoll] = useState(1);
   /** Play the Odds: the previewed (adjusted) roll while nudging, else null. */
   const [poddsRoll, setPoddsRoll] = useState<number | null>(null);
+  /** Which ending's Epilogue is open (null = not ending the story). */
+  const [epilogueKind, setEpilogueKind] = useState<EpilogueKind | null>(null);
+  /** "End your story" disclosure — kept collapsed so it is never a misclick. */
+  const [endMenuOpen, setEndMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const sector = sectorData[currentSector];
   const isSettlement = !!sector?.isSettlement;
@@ -1313,8 +1321,47 @@ export default function RoundTab() {
     if (!mainQuest) return;
     setMainQuest({ ...mainQuest, status: 'Completed' });
     updateXp(3);
-    appendJournal('MAIN QUEST COMPLETE! (+3 XP) — Your story reaches its end. Write your Epilogue in the Journal stage.');
-    showAlert('Main Quest complete! +3 XP. Write your Epilogue this Journal stage — and perhaps a new Dweller will follow in your footsteps.');
+    appendJournal('MAIN QUEST COMPLETE! (+3 XP) — your story reaches its end.');
+    setEndMenuOpen(false);
+    setEpilogueKind('quest');
+  };
+
+  // Ending three of three (pg.142): "simply deciding to settle down". A story
+  // you end on purpose beats one that fizzles out.
+  const settleDown = () => {
+    appendJournal('You stop wandering. This is where the road ends — by choice.');
+    setEndMenuOpen(false);
+    setEpilogueKind('settle');
+  };
+
+  // Unknown Location Blocker (pg.74): you cannot travel to a Blocker you cannot
+  // find. The book's way out is to trade a Side Quest reward for the missing
+  // information, then re-roll the Blocker (re-rolling further Unknown Location
+  // results) and generate a real Blocker Location.
+  const tradeRewardForInformation = (index: number) => {
+    if (!mainQuest) return;
+    chargeIrradiatedSafeAction();
+    const quest = sideQuests[index];
+    setSideQuestStatus(index, 'Completed');
+    updateXp(1);
+    updateLuck(1);
+    let blocker = rollMainQuestBlocker();
+    for (let guard = 0; blocker.name === 'Unknown Location' && guard < 20; guard++) {
+      blocker = rollMainQuestBlocker();
+    }
+    const location = EDGE_SQUARES[Math.floor(Math.random() * EDGE_SQUARES.length)];
+    setMainQuest({
+      ...mainQuest,
+      blocker: blocker.name,
+      blockerDesc: blocker.description,
+      blockerLocation: location
+    });
+    appendJournal(
+      `SIDE QUEST COMPLETE [${quest.goalType}]: ${quest.goal}\n` +
+      `You took the information instead of the reward. At last you know where to go — ` +
+      `your Blocker is ${blocker.name}, at Square ${location}. (+1 XP, +1 Luck Point)`
+    );
+    showAlert(`You know where to go now.\n\nBlocker: ${blocker.name} — Square ${location}.\n\n+1 XP, +1 Luck Point.`);
   };
 
   /** Applies a side quest reward to the character for real. */
@@ -1535,6 +1582,16 @@ export default function RoundTab() {
     }
   });
 
+  // Open threads + prompts you have not written to yet. Surfaced at the top of
+  // each Round so a campaign picked up a week later still answers the only
+  // question that matters: what was I doing?
+  const openQuests = sideQuests
+    .map((q, i) => ({ q, i }))
+    .filter(({ q }) => q.status === 'Active');
+  const unanswered = openQuests.filter(({ q, i }) =>
+    q.questions && !journalEntries.some(e => e.id === `sq-${i}` && e.answer.trim().length > 0)
+  ).length;
+
   // ---------- JOURNAL ----------
   const finishRound = () => {
     const header = `\n=== Round ${round} — ${gameDate(day)} (Square ${currentSector}) ===`;
@@ -1583,6 +1640,87 @@ export default function RoundTab() {
       {/* ============ TRAVEL ============ */}
       {stage === 'travel' && (
         <div className="space-y-3">
+          {/* ---- Round 1: the briefing a brand-new player needs ---- */}
+          {round === 1 ? (
+            <div className="border-2 border-amber-400 p-3 space-y-2 bg-[#1a1405]">
+              <div className="flex items-center gap-2 text-amber-400 font-bold">
+                <Compass size={18} /> Your story begins
+              </div>
+              <div className="text-sm normal-case space-y-2">
+                <p>
+                  You are at Square {VAULT_SQUARE}, the Vault you just left. This tab is the whole game:
+                  <span className="text-white"> Travel → Encounter → Action → Journal</span>, once per round,
+                  for as long as your story lasts.
+                </p>
+                {mainQuest && (
+                  <p>
+                    <span className="text-amber-400 font-bold">Your quest:</span> {mainQuest.goal}
+                    {mainQuest.goalDesc ? ` — ${mainQuest.goalDesc}` : ''}
+                  </p>
+                )}
+                {mainQuest && (
+                  <p>
+                    <span className="text-amber-400 font-bold">In your way:</span> {mainQuest.blocker}
+                    {mainQuest.blockerLocation
+                      ? <> — waiting at <span className="text-white">Square {mainQuest.blockerLocation}</span>, marked <span className="text-red-500 font-bold">!</span> on the grid below. Work your way there.</>
+                      : <> — and you do not yet know where. Finding out is the first half of your quest: complete a Side Quest and trade its reward for the information.</>}
+                  </p>
+                )}
+                <p className="text-amber-400">
+                  First move: tap any square next to you, then Travel.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/codex')}
+                className="w-full border border-amber-400 text-amber-400 p-2 text-xs uppercase hover:bg-amber-400 hover:text-black flex items-center justify-center gap-2"
+              >
+                <Book size={14} /> Read "Start Here" first (2 minutes)
+              </button>
+            </div>
+          ) : (
+            /* ---- Every other round: what is still open, so play sustains ---- */
+            <div className="border border-[#14FF00]/50 p-3 space-y-2 bg-[#051a05]">
+              <div className="text-xs font-bold flex items-center gap-2">
+                <Compass size={14} /> Where you stand
+              </div>
+              <div className="text-xs normal-case space-y-1">
+                {mainQuest && mainQuest.status !== 'Completed' && (
+                  <div>
+                    <span className="text-amber-400">Main Quest:</span> {mainQuest.goal} —{' '}
+                    {mainQuest.blockerLocation
+                      ? <>blocked by {mainQuest.blocker} at <span className="text-white">Square {mainQuest.blockerLocation}</span> <span className="text-red-500 font-bold">!</span></>
+                      : <>blocked by {mainQuest.blocker} — location still unknown; trade a Side Quest reward for the information.</>}
+                  </div>
+                )}
+                {openQuests.length > 0 ? (
+                  <div>
+                    <span className="text-amber-400">Open threads:</span>{' '}
+                    {openQuests.map(({ q }) => `${q.goal.replace(/\.$/, '')} (Sq.${q.location})`).join(' • ')}
+                  </div>
+                ) : (
+                  <div className="opacity-60">
+                    No Side Quests open. Take one from Meet, or generate one in the Data tab — they are
+                    what keeps a story from becoming a walking tour.
+                  </div>
+                )}
+                {unanswered > 0 && (
+                  <div className="text-amber-400">
+                    {unanswered} prompt{unanswered === 1 ? '' : 's'} still unanswered — the Journal tab
+                    lists them.
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-[#14FF00]/30 pt-2 text-[11px] normal-case opacity-70 flex items-start gap-2">
+                <HelpCircle size={13} className="shrink-0 mt-0.5" />
+                <span>
+                  Stuck for what happens next? Ask the <span className="text-[#14FF00]">Oracle</span> a
+                  yes/no question, or roll the <span className="text-amber-400">Muse</span>
+                  <Sparkles size={11} className="inline mx-0.5 text-amber-400" />
+                  for two words to riff on. Both are free and always on screen.
+                </span>
+              </div>
+            </div>
+          )}
           <p className="text-sm normal-case opacity-80">
             Pick an adjacent location (no diagonals). Travel costs 1 Supply — with none, you lose 2 HP.
             You have {supplies} Supplies, {hp} HP.
@@ -1860,6 +1998,17 @@ export default function RoundTab() {
                           Complete
                         </button>
                       </div>
+                      {mainQuest?.blocker === 'Unknown Location' && (
+                        <button
+                          onClick={() => tradeRewardForInformation(i)}
+                          className="w-full border border-red-500/70 text-red-400 p-1.5 text-left hover:bg-red-500 hover:text-black"
+                        >
+                          ⚑ Trade this reward for the information
+                          <span className="block text-[10px] opacity-70">
+                            Give up "{q.reward}" to learn where your Main Quest Blocker actually is.
+                          </span>
+                        </button>
+                      )}
                       {!q.renegotiated && (
                         <div className="flex items-center gap-1 opacity-80">
                           <span className="opacity-60">Reward not fitting?</span>
@@ -1888,10 +2037,45 @@ export default function RoundTab() {
                 </div>
               )}
 
-              {mainQuest?.status !== 'Completed' && atBlocker && (
-                <button onClick={completeMainQuest} className="w-full border-2 border-amber-400 text-amber-400 p-2 font-bold hover:bg-amber-400 hover:text-black">
-                  Complete Main Quest (+3 XP, write your Epilogue)
-                </button>
+              {/* ---- End your story (pg.142). Collapsed so it is never a
+                   misclick, but always findable — an ending you choose beats
+                   one you drift into. ---- */}
+              {!inDanger && mainQuest?.status !== 'Completed' && (
+                <div className="border border-amber-400/40 rounded-sm">
+                  <button
+                    onClick={() => setEndMenuOpen(!endMenuOpen)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-amber-400 hover:bg-amber-400/10"
+                  >
+                    <span className="flex items-center gap-2"><Flag size={14} /> End your story</span>
+                    <ChevronRight size={14} className={endMenuOpen ? 'rotate-90 transition-transform' : 'transition-transform'} />
+                  </button>
+                  {endMenuOpen && (
+                    <div className="p-2 border-t border-amber-400/30 space-y-2">
+                      <p className="text-[11px] normal-case opacity-70">
+                        Both endings open the Epilogue, where you write your last entry and export your
+                        story. Nothing is erased until you explicitly choose to start a new Dweller.
+                      </p>
+                      <button
+                        onClick={completeMainQuest}
+                        className="w-full border-2 border-amber-400 text-amber-400 p-2 font-bold text-sm hover:bg-amber-400 hover:text-black text-left"
+                      >
+                        Complete Main Quest (+3 XP)
+                        <span className="block text-[10px] font-normal normal-case opacity-70">
+                          You achieved your Goal: {mainQuest?.goal}
+                        </span>
+                      </button>
+                      <button
+                        onClick={settleDown}
+                        className="w-full border-2 border-[#14FF00] p-2 font-bold text-sm hover:bg-[#14FF00] hover:text-black text-left"
+                      >
+                        Settle Down
+                        <span className="block text-[10px] font-normal normal-case opacity-70">
+                          Stop wandering. You found somewhere worth staying.
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               <button
@@ -1932,6 +2116,8 @@ export default function RoundTab() {
           </button>
         </div>
       )}
+
+      {epilogueKind && <EpilogueModal kind={epilogueKind} onClose={() => setEpilogueKind(null)} />}
 
       {showLevelUp && <LevelUpModal onClose={() => {
         // Leveling Up is a Safe Action — if a level was actually gained here, the irradiated ground still bites.

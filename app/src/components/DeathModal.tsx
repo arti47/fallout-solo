@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useGameState, getInitialGameData } from '../store/gameState';
-import { useUIState } from '../store/uiState';
+import { useGameState } from '../store/gameState';
 import { rollMiraculousEscape } from '../data/characterTables';
+import EpilogueModal from './EpilogueModal';
 import { Skull, HeartCrack, Sparkles } from 'lucide-react';
 
 // Death (pg.97): when an Injury could kill you, YOU decide. The questions below
@@ -16,9 +16,12 @@ const DEATH_QUESTIONS = [
 
 export default function DeathModal() {
   const { hp, maxHp, rads, luck, updateHp, updateLuck, appendJournal, injuries } = useGameState();
-  const { showConfirm } = useUIState();
   const [escape, setEscape] = useState<{ name: string; description: string } | null>(null);
+  const [epilogue, setEpilogue] = useState(false);
 
+  // The Epilogue outlives the death screen: once it is open it stays open even
+  // after a heal, so closing it never strands the player on a blank page.
+  if (epilogue) return <EpilogueModal kind="death" onClose={() => setEpilogue(false)} />;
   if (hp > 0) return null;
 
   const handleLiveOn = () => {
@@ -40,11 +43,8 @@ export default function DeathModal() {
   };
 
   const handleEndStory = () => {
-    showConfirm('Write your Epilogue in the Journal first, then confirm: this permanently deletes your character.', () => {
-      useGameState.setState(getInitialGameData());
-      useGameState.persist.clearStorage();
-      window.location.reload();
-    });
+    appendJournal('The end of the road. Writing the Epilogue.');
+    setEpilogue(true);
   };
 
   if (escape) {

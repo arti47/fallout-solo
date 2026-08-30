@@ -7,6 +7,16 @@ const SPECIAL_NAMES: Record<string, string> = {
   I: 'Intelligence', A: 'Agility', L: 'Luck'
 };
 
+/** Human-readable heading for each structured journal entry type. */
+const ENTRY_LABELS: Record<string, string> = {
+  main: 'Main Quest',
+  side: 'Side Quest',
+  encounter: 'Encounter',
+  oracle: 'The Oracle',
+  muse: "The Wanderer's Muse",
+  epilogue: 'Epilogue'
+};
+
 export const buildStoryMarkdown = (): string => {
   const s = useGameState.getState();
   const lines: string[] = [];
@@ -93,11 +103,44 @@ export const buildStoryMarkdown = (): string => {
     lines.push('');
   }
 
+  // ---- Answered prompts ----
+  // The structured entries ARE the story the player wrote; the free-form log
+  // below is the running record. Both belong in the export.
+  const written = [...s.journalEntries].sort((a, b) => a.createdTs - b.createdTs);
+  const epilogue = written.filter(e => e.type === 'epilogue');
+  const inPlay = written.filter(e => e.type !== 'epilogue');
+
+  if (inPlay.length) {
+    lines.push('## The Story');
+    lines.push('');
+    inPlay.forEach(e => {
+      lines.push(`### Day ${e.day}, Round ${e.round} — ${ENTRY_LABELS[e.type] ?? 'Note'}`);
+      lines.push('');
+      lines.push(`> ${e.question}`);
+      lines.push('');
+      lines.push(e.answer);
+      lines.push('');
+    });
+  }
+
   // ---- Journal ----
-  lines.push('## The Journal');
+  lines.push('## The Log');
   lines.push('');
   lines.push(s.journalText.trim());
   lines.push('');
+
+  // ---- Epilogue ---- (last word, always)
+  if (epilogue.length) {
+    lines.push('## Epilogue');
+    lines.push('');
+    epilogue.forEach(e => {
+      lines.push(`**${e.question}**`);
+      lines.push('');
+      lines.push(e.answer);
+      lines.push('');
+    });
+  }
+
   lines.push('---');
   lines.push('*War. War never changes.*');
 
