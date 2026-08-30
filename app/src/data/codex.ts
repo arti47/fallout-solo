@@ -7,6 +7,7 @@ import chapter4 from './codex/chapter4.md?raw';
 import chapter5 from './codex/chapter5.md?raw';
 import chapter6 from './codex/chapter6.md?raw';
 import { buildAppendixMarkdown } from './codexAppendix';
+import { GUIDE_MARKDOWN } from './guide';
 
 // Chapter 7 is generated from the app's typed game data (always clean & in sync).
 const chapter7 = buildAppendixMarkdown();
@@ -17,9 +18,19 @@ export interface CodexChapter {
   title: string;
   summary: string;
   content: string;
+  /** Overrides the "Chapter N" prefix in the index (used by Start Here). */
+  label?: string;
 }
 
 export const CODEX_CHAPTERS: CodexChapter[] = [
+  {
+    id: 'start-here',
+    number: 0,
+    label: 'Start Here',
+    title: 'How to Play',
+    summary: 'The shape of an actual game: your first round button by button, how to sustain a story across sessions, and how to end one deliberately.',
+    content: GUIDE_MARKDOWN
+  },
   {
     id: 'introduction',
     number: 1,

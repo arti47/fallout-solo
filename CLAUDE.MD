@@ -36,16 +36,17 @@ The app lives in `app/` (Vite + React 19 + TypeScript + Tailwind + zustand). Bui
 - **MapTab**: legacy free-roam map view (the Round tab is the guided path).
 - **JournalTab**: the story log (typing ticks; auto `[SYSTEM]` entries from everywhere).
 - **CodexTab**: searchable rulebook browser with real table rendering.
-- **CharacterCreation** (`creation/Step1-7`): book-exact wizard; stages auto-advance when complete (points spent, tags picked, gear chosen).
+- **CharacterCreation** (`creation/Step1-7`): book-exact wizard; stages auto-advance when complete (points spent, tags picked, gear chosen). Finishing navigates to `/round` (not `/stats`) so a new player lands in the game loop on the Round 1 briefing.
 
 ### Components (`src/components/`)
+- **EpilogueModal** (`EpilogueModal.tsx`): the guided ending — four Epilogue prompts (`type: 'epilogue'`), Export Story, then an explicit, separate "Begin a new Dweller" wipe. Opened by Main Quest completion, Settle Down, and `DeathModal`; closing it always keeps the character.
 - **CombatView** (`CombatView.tsx`): the redesigned, self-contained combat UI rendered inline by RoundTab (and by the hidden CombatTab sandbox). Persistent HUD (HP bar, AP/LP, equipped weapon & armor, per-foe Threat/status, Combat State banner), tap-a-foe-to-attack with auto-best-weapon (one-tap change), equal-billing action modes (Attack/Slaughter/Outwit/Talk Down/Flee), pre-roll AP/Luck boosts + post-roll re-roll, dice-reveal-then-verdict, an "enemy turn" beat, Endure/Complication as spotlight modals, and a victory/talk/flee summary card. Wraps the pure `combatEngine.ts` logic; takes an `onExit(toStage)` callback. **GlobalModal** (alert/confirm), **SkillTestModal** (manual 2d20 widget), **OracleWidget** (book dice logic + Cheat the Oracle), **MuseWidget** (the Wanderer's Muse d100 Elements Meaning Table — see below), **DeathModal** (Death questions, Miraculous Escape, epilogue), **LevelUpModal** (perk picker with prerequisite checks), **TutorialOverlay** (route-driven first-visit tips), **dice/DiceRoller** (3D physics d20s).
 
 ### Utils (`src/utils/`)
 - `skillTest.ts` (pure 2d20 engine: TN, tag crits, Try-Your-Luck, re-roll-worst-die), `combatEngine.ts` (foe turns as declarative effects; ~25 special abilities; defeat rules; loot), `sound.ts` (Web Audio SFX, respects `soundEnabled`), `storyExport.ts` (Markdown compile).
 
 ### Data (`src/data/`)
-All book tables as typed data (see Phase 1 below) plus `codex.ts` (chapters 1–6 from cleaned markdown in `codex/`, **chapter 7 generated at runtime from the typed data** by `codexAppendix.ts` — never edit a chapter7.md, it doesn't exist).
+All book tables as typed data (see Phase 1 below) plus `guide.ts` (the "Start Here" how-to-play chapter — start/sustain/end, surfaced as Codex chapter 0) and `codex.ts` (chapters 1–6 from cleaned markdown in `codex/`, **chapter 7 generated at runtime from the typed data** by `codexAppendix.ts` — never edit a chapter7.md, it doesn't exist).
 
 ---
 
@@ -201,6 +202,29 @@ The PWA now has a **service worker** for full offline play plus an in-app **upda
 - **`src/pwa/registerSW.ts`**: registers `${BASE_URL}sw.js` (prod only), fires `onOfflineReady` on first install and `onNeedRefresh` when a new worker reaches `installed` while one already controls the page. `applyUpdate()` posts `SKIP_WAITING`; a `controllerchange` (guarded so it only reloads on a user-triggered update, not first install) reloads the page. Checks for updates once on load (no polling).
 - **`components/UpdateToast.tsx`** (mounted at App root, above all routes incl. creation): a Pip-Boy toast. Green **"New version available"** with an **Update** button (applies + reloads) and a dismiss; amber **"Ready to play offline"** shown once on first cache (auto-dismisses after 6s). `z-[70]`, bottom-centered above the nav/FABs.
 - Verified end-to-end in headless Chromium: first-install offline-ready toast → SW takes control → **real offline reload still renders the app** → a second build triggers the new-version toast → tapping Update activates the new worker, reloads, and swaps to the new cache. No page errors.
+
+---
+
+## Onboarding the Session Arc: Start → Sustain → End — ✅ DONE
+
+The app taught the *rules* (Codex) and ran the *loop* (Round tab), but never taught the **shape of a game**: how to begin, how to keep a story going across sessions, or how to finish one. Player report: "I still don't know how to start playing, sustaining play, and ending the game well." Three code defects were found behind that complaint, not just missing documentation.
+
+**Guidance added**
+- **`data/guide.ts` + Codex "Start Here" chapter** (`codex.ts`, `CodexTab.tsx`): a written guide in three parts — Part 1 Starting (your first round button by button, what you are actually trying to do), Part 2 Sustaining (session rhythm, the Oracle/Muse as the answer to "I don't know what happens next", threads vs. wandering, spending AP/LP/Supplies), Part 3 Ending well (the book's three endings, the Epilogue, exporting before a wipe). `CodexChapter` gained an optional `label` so chapter 0 renders as "Start Here" (amber) instead of "Chapter 0"; it is searchable alongside the rulebook.
+- **Round 1 briefing** (`RoundTab`, travel stage): names the quest, the Blocker and its `!` square (or explains the Unknown-Location swap), states the first move, and links to Start Here. `CharacterCreation.handleFinish` now navigates to `/round` instead of `/stats` — creation used to end on a static stat sheet with no call to action.
+- **"Where you stand"** (`RoundTab`, travel stage, rounds 2+): the Main Quest with its blocker location, open Side Quest threads with squares, a count of prompts still unanswered, and the Oracle/Muse reminder. Answers "what was I doing?" when a campaign is picked up a week later.
+
+**The Epilogue flow** (`components/EpilogueModal.tsx`, new)
+- Reachable from all three of the book's endings (pg.142): Main Quest completion, death by Injuries, and **"simply deciding to settle down"** — which had no path at all before. The latter two live in a new collapsed **"End your story"** disclosure in the Action stage (collapsed so it is never a misclick, but always findable).
+- Four guided prompts written into `journalEntries` as a new `'epilogue'` type (added to `gameState.ts`, `AnswerBox`, `JournalTab` filter chips, and the export). Then **Export your story**, then — separately and explicitly — Begin a new Dweller.
+- **Nothing is erased until the player chooses it.** `DeathModal.handleEndStory` used to fire a confirm and immediately wipe the character *and the entire journal*; it now opens the Epilogue. The wipe warns differently if the story has not been exported yet.
+
+**Defects fixed**
+- **`storyExport` silently dropped every structured answer.** It exported only `journalText`, so all `journalEntries` — Oracle, Muse, encounter and quest prompts, the whole point of the structured journaling feature — were missing from the export. Now emits `## The Story` (chronological, type-labelled), `## The Log` (the free-form log), and `## Epilogue` last.
+- **An Unknown Location Blocker made the Main Quest permanently uncompletable.** `blockerLocation` is `null` for that blocker, so `atBlocker` was never true and neither *Clear Blocker* nor *Complete Main Quest* ever rendered — roughly 1 in 10 characters could not finish their story. Implemented the book's actual rule (pg.74): a per-quest **"Trade this reward for the information"** control on Active Side Quests re-rolls the Blocker (re-rolling further Unknown Location results) and generates a real Blocker Location.
+- **Complete Main Quest was gated on standing at the blocker square.** Now lives in the "End your story" disclosure, gated only on being Safe and not already complete.
+
+Verified headless at 360/390/414px: 34 assertions covering the briefing (both blocker variants), Where-you-stand, the endings disclosure, the Epilogue opening from settle-down *and* death, epilogue answers persisting as `type: 'epilogue'`, a real download whose Markdown contains the structured entries + Epilogue, the information-trade rewriting the blocker with +1 XP/+1 LP, that opening the Epilogue never erases the character, and no horizontal overflow. Lint count unchanged from HEAD (21 pre-existing).
 
 ---
 

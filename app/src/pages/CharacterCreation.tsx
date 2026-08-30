@@ -61,8 +61,10 @@ export default function CharacterCreation() {
       };
     });
     
-    // Redirect to the Stats tab in the main Pip-Boy view
-    navigate('/stats');
+    // Straight into the game loop — the Round tab opens with a Round 1
+    // briefing. Landing on a static stat sheet left new players with no
+    // call to action.
+    navigate('/round');
   };
 
   return (

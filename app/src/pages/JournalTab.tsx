@@ -10,6 +10,7 @@ const TYPE_META: Record<JournalEntryType, { label: string; text: string; border:
   encounter: { label: 'ENCOUNTER', text: 'text-[#14FF00]', border: 'border-[#14FF00]' },
   oracle: { label: 'ORACLE', text: 'text-cyan-400', border: 'border-cyan-400' },
   muse: { label: 'MUSE', text: 'text-amber-400', border: 'border-amber-400' },
+  epilogue: { label: 'EPILOGUE', text: 'text-white', border: 'border-white' },
 };
 
 type Filter = 'all' | JournalEntryType;
@@ -20,6 +21,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'encounter', label: 'Encounter' },
   { key: 'oracle', label: 'Oracle' },
   { key: 'muse', label: 'Muse' },
+  { key: 'epilogue', label: 'Epilogue' },
 ];
 
 export default function JournalTab() {
