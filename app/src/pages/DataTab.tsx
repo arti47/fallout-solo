@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useGameState, getInitialGameData } from '../store/gameState';
 import {
   Download, Upload, Trash2, UserPlus, MapPin, BookText, Volume2, VolumeX,
-  GraduationCap, Sparkles
+  GraduationCap, Sparkles, HelpCircle
 } from 'lucide-react';
 import { downloadStory } from '../utils/storyExport';
 import AnswerBox from '../components/AnswerBox';
@@ -12,6 +12,7 @@ import { generateFoeEncounter } from '../data/characterTables';
 import { rollCombatStateEntry, rollWastelandTruth, rollSettlementTruth } from '../data/encounters';
 import { rollScavenge, rollChem } from '../data/lootTables';
 import { useUIState } from '../store/uiState';
+import ScreenHint from '../components/ScreenHint';
 
 export default function DataTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -19,7 +20,7 @@ export default function DataTab() {
 
   const { showAlert, showConfirm } = useUIState();
   const {
-    soundEnabled, toggleSound, tutorialEnabled, toggleTutorial,
+    soundEnabled, toggleSound, tutorialEnabled, toggleTutorial, hintsEnabled, toggleHints,
     npcs, sideQuests, mainQuest, currentSector, sectorData,
     addNpc, addSideQuest, addGear, updateSectorData, appendJournal, setSideQuestStatus
   } = useGameState();
@@ -181,6 +182,8 @@ export default function DataTab() {
         DATA & LOGS
       </h2>
 
+      <ScreenHint id="data" />
+
       <div className="flex flex-col gap-4">
         {/* ============ GENERATORS ============ */}
         <div className="border border-amber-400 p-3 flex flex-col gap-2">
@@ -338,6 +341,12 @@ export default function DataTab() {
               className={`flex-1 border p-2 text-sm transition-colors flex items-center justify-center gap-2 ${tutorialEnabled ? 'border-[#14FF00]' : 'border-[#14FF00]/40 opacity-60'}`}
             >
               <GraduationCap size={16} /> Tutorial: {tutorialEnabled ? 'ON' : 'OFF'}
+            </button>
+            <button
+              onClick={toggleHints}
+              className={`flex-1 border p-2 text-sm transition-colors flex items-center justify-center gap-2 ${hintsEnabled ? 'border-[#14FF00]' : 'border-[#14FF00]/40 opacity-60'}`}
+            >
+              <HelpCircle size={16} /> Hints: {hintsEnabled ? 'ON' : 'OFF'}
             </button>
           </div>
 

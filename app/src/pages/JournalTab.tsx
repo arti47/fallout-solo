@@ -3,6 +3,7 @@ import { useGameState } from '../store/gameState';
 import type { JournalEntryType } from '../store/gameState';
 import AnswerBox from '../components/AnswerBox';
 import { sfx } from '../utils/sound';
+import ScreenHint from '../components/ScreenHint';
 
 const TYPE_META: Record<JournalEntryType, { label: string; text: string; border: string }> = {
   main: { label: 'MAIN', text: 'text-red-400', border: 'border-red-400' },
@@ -39,6 +40,8 @@ export default function JournalTab() {
       <h2 className="text-2xl border-b border-[#14FF00] pb-2 font-bold tracking-widest text-center">
         PERSONAL LOG
       </h2>
+
+      <ScreenHint id="journal" />
 
       {/* ===== STORY LOG: answered prompts, chronological + filter ===== */}
       <div className="flex flex-col gap-2">

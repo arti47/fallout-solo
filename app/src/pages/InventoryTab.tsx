@@ -1,6 +1,7 @@
 import { useGameState } from '../store/gameState';
 import { useUIState } from '../store/uiState';
 import { sfx } from '../utils/sound';
+import ScreenHint from '../components/ScreenHint';
 
 export default function InventoryTab() {
   const { special, caps, supplies, gear, equipGear, consumeItem, combatActive, ap, updateAp } = useGameState();
@@ -16,6 +17,8 @@ export default function InventoryTab() {
       <h2 className="text-2xl border-b border-[#14FF00] pb-2 font-bold tracking-widest text-center">
         INVENTORY
       </h2>
+
+      <ScreenHint id="inventory" />
 
       {/* Currency & Consumables */}
       <div className="grid grid-cols-2 gap-4">

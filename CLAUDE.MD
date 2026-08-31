@@ -250,6 +250,21 @@ Lint count unchanged from `main` (21 pre-existing). Final iteration: 0 static fa
 
 ---
 
+## Persistent Per-Screen Guidance ("What to do here") — ✅ DONE
+
+`TutorialOverlay` fires once per tab and is then gone forever, so a player who dismissed it — or came back weeks later — had nothing on screen telling them what a screen was for. Reported directly: *"What am I supposed to do here?"* while sitting on the Encounter stage.
+
+- **`data/screenHints.ts`**: a summary line, numbered steps and one gotcha per screen. Covers the four Round stages separately (`round-travel`, `round-encounter`, `round-action`, `round-journal` — they have completely different jobs, which a single per-tab tip could never express), plus `combat`, Stats, Inventory, Data, Map, Journal and Codex.
+- **`components/ScreenHint.tsx`**: a slim bar reading "WHAT TO DO HERE" plus the one-line summary, expanded by default, tap to collapse. Muted `border-[#14FF00]/40` so it never competes with the content it explains.
+- **Store**: `hintsEnabled` (default on) and `collapsedHints[]` — collapse is per screen and persists across reloads, so collapsing Stats leaves the Encounter hint open.
+- **Settings**: a `Hints: ON/OFF` toggle beside the Tutorial toggle in Data → SYS.MGMT kills them wholesale for a veteran player.
+
+This complements rather than replaces the existing pieces: `TutorialOverlay` is still the first-visit tip, the Round 1 briefing still names your quest, "Where you stand" still tracks open threads, and the Codex "Start Here" chapter is still the long explanation. The hint is only the signpost.
+
+Verified headless: the bar and correct summary on all six reference tabs and all four Round stages, collapse persisting per screen across a reload, one screen's collapse not affecting another, the global toggle hiding everything, and no horizontal overflow at 360/390/414px.
+
+---
+
 ## Chapter 3 (Character Creation) Rules Audit — ✅ DONE
 
 Full line-by-line audit of the creation flow against the Chapter 3 rulebook text. Verified correct: Population/Reputation ranges + sole-survivor skip, Linked-NPC 4-column rolls and all four NPC sub-tables, Vault Number 1-122, all 32 Known Vaults (numbers/truths/regions), the full 20-row G.O.A.T. table with ranks, the 17-entry Skill Item Table, 15+INT / INT-bonus skill pools with the 5-rank cap and exactly 2 Tags, HP = 5+END, Luck = ⌈LCK/2⌉, Level 1, AP = 0 capped by AGI, the 20-entry Goal table, all 10 Blocker types with correct ranges, outer-edge Blocker Location, and the Unknown-Location skip.

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGameState } from '../store/gameState';
 import { useUIState } from '../store/uiState';
 import LevelUpModal from '../components/LevelUpModal';
+import ScreenHint from '../components/ScreenHint';
 
 export default function StatsTab() {
   const { name, level, xp, hp, maxHp, ap, maxAp, luck, maxLuck, rads, special, skills, updateHp, updateAp, updateLuck, supplies, updateSupplies, appendJournal, perks, injuries } = useGameState();
@@ -24,7 +25,9 @@ export default function StatsTab() {
 
   return (
     <div className="flex flex-col gap-6 uppercase">
-      {/* Header Info */}
+      {/* Header Info */}      <ScreenHint id="stats" />
+
+
       <div className="grid grid-cols-2 border border-[#14FF00] p-3 gap-2">
         <div className="col-span-2">NAME: <span className="text-white">{name || 'UNKNOWN VAULT DWELLER'}</span></div>
         <div className="flex justify-between items-center pr-2">

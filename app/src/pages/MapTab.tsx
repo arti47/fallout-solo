@@ -7,6 +7,7 @@ import type { EncounterResult } from '../data/encounters';
 import { rollScavenge } from '../data/lootTables';
 import { getRandomFoe } from '../data/bestiary';
 import { Map as MapIcon, Search, AlertTriangle, Skull } from 'lucide-react';
+import ScreenHint from '../components/ScreenHint';
 
 export default function MapTab() {
   const navigate = useNavigate();
@@ -102,6 +103,8 @@ export default function MapTab() {
       <h2 className="text-2xl border-b border-[#14FF00] pb-2 font-bold tracking-widest text-center">
         REGION MAP
       </h2>
+
+      <ScreenHint id="map" />
 
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="grid grid-cols-5 gap-1 border-2 border-[#14FF00] p-1 bg-[#051a05]">
