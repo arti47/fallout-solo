@@ -151,6 +151,9 @@ export interface GameState {
   inDanger: boolean;
   scavengedThisRound: boolean;
   tradedThisRound: boolean;
+  /** Actions already taken this Round, so the Director does not recommend the
+   *  same one forever. Cleared by completeRound. */
+  actionsThisRound: string[];
   currentEncounter: EncounterInfo | null;
   /** Foes generated for the CURRENT encounter, waiting to be fought. Persisted
    *  so closing the app mid-encounter does not silently disarm the scene. */
@@ -179,8 +182,8 @@ export interface GameState {
   seenTutorials: string[];
   /** Persistent per-screen "what to do here" signposts. */
   hintsEnabled: boolean;
-  /** Screen hints the player has collapsed to a single line. */
-  collapsedHints: string[];
+  /** Screen hints the player has opened out (they start as a single line). */
+  expandedHints: string[];
   
   // Combat Tracker
   combatActive: boolean;
@@ -210,7 +213,7 @@ export interface GameState {
   consumeItem: (id: string) => void;
   toggleTutorial: () => void;
   toggleHints: () => void;
-  toggleHintCollapsed: (id: string) => void;
+  toggleHintExpanded: (id: string) => void;
   toggleSound: () => void;
   markTutorialSeen: (key: string) => void;
   setCurrentSector: (sector: number) => void;
@@ -223,6 +226,7 @@ export interface GameState {
   setEncounterScene: (scene: { foes?: FoeTemplate[]; extras?: string[]; danger?: boolean }) => void;
   markScavenged: () => void;
   markTraded: () => void;
+  markActionTaken: (name: string) => void;
   completeRound: () => void;
   setNextTestModifier: (value: number) => void;
 
@@ -322,6 +326,7 @@ export const getInitialGameData = () => ({
   inDanger: false,
   scavengedThisRound: false,
   tradedThisRound: false,
+  actionsThisRound: [] as string[],
   currentEncounter: null as EncounterInfo | null,
   encounterFoes: [] as FoeTemplate[],
   encounterExtras: [] as string[],
@@ -345,7 +350,7 @@ export const getInitialGameData = () => ({
   soundEnabled: true,
   seenTutorials: [] as string[],
   hintsEnabled: true,
-  collapsedHints: [] as string[]
+  expandedHints: [] as string[]
 });
 
 export const useGameState = create<GameState>()(
@@ -439,10 +444,10 @@ export const useGameState = create<GameState>()(
       }),
       toggleTutorial: () => set((state) => ({ tutorialEnabled: !state.tutorialEnabled })),
       toggleHints: () => set((state) => ({ hintsEnabled: !state.hintsEnabled })),
-      toggleHintCollapsed: (id) => set((state) => ({
-        collapsedHints: state.collapsedHints.includes(id)
-          ? state.collapsedHints.filter(h => h !== id)
-          : [...state.collapsedHints, id]
+      toggleHintExpanded: (id) => set((state) => ({
+        expandedHints: state.expandedHints.includes(id)
+          ? state.expandedHints.filter(h => h !== id)
+          : [...state.expandedHints, id]
       })),
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
       markTutorialSeen: (key) => set((state) => ({
@@ -468,6 +473,11 @@ export const useGameState = create<GameState>()(
       })),
       markScavenged: () => set({ scavengedThisRound: true }),
       markTraded: () => set({ tradedThisRound: true }),
+      markActionTaken: (name) => set((state) => ({
+        actionsThisRound: state.actionsThisRound.includes(name)
+          ? state.actionsThisRound
+          : [...state.actionsThisRound, name]
+      })),
       setNextTestModifier: (nextTestModifier) => set({ nextTestModifier }),
       completeRound: () => set((state) => ({
         round: state.round + 1,
@@ -476,6 +486,7 @@ export const useGameState = create<GameState>()(
         inDanger: false,
         scavengedThisRound: false,
         tradedThisRound: false,
+        actionsThisRound: [],
         currentEncounter: null,
         encounterFoes: [],
         encounterExtras: [],

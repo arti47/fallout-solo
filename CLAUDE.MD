@@ -278,6 +278,23 @@ Covered by the audit harness (`src/__audit.ts`): every encounter and Combat Stat
 
 ---
 
+## The Director: Play Without Reading Anything — ✅ DONE
+
+Player feedback, after three earlier onboarding passes: *"I still don't know how to start playing, sustaining play and ending the game well. Need to be idiot proof… someone too lazy to read the manual. Just directly play straight from the app."*
+
+Every earlier attempt added **text explaining the rules** (the Start Here chapter, the Round 1 briefing, "Where you stand", the per-screen hints). That was the wrong shape: more reading for someone who does not want to read. This pass makes the app **drive**.
+
+- **`utils/director.ts`** — a pure `nextStep(state)` that works out the single best next move and says it as an imperative with half a sentence of why: *"Travel to Square 12 — you have never been there. Costs 1 Supply (you have 2)."* It handles every situation: travel targets (Blocker first, then Side Quests, then unexplored, then toward the Blocker), the danger verdict, which Action matters most right now (hurt → Rest, injured → Patch Up, at the Blocker → Clear it, XP → Level Up, low Supplies → Find Supplies, NPC present → Meet, then Scavenge/Trade/Explore), ending the Round, and both endings — it goes terminal on a completed Main Quest and on 0 HP, where the Death panel owns the screen.
+- **`components/NextStep.tsx`** — the loudest element on the Round tab, mounted above every stage and in the combat takeover. Tapping it **performs** the move; it does not explain it. Combat and death render it non-actionable, since those screens own the tap.
+- **`actionsThisRound`** (store) — the Director would otherwise recommend the same Action forever. Actions are recorded as taken and cleared by `completeRound`, so it always makes progress and ends at "Done here — write the Round up".
+- **`utils/quickStart.ts`** — **"Play now — roll everything for me"** on the creation screen rolls all seven stages (Vault, S.P.E.C.I.A.L. 4+12, G.O.A.T. + INT ranks with 2 Tags, HP = 5+END, Luck = ⌈LCK/2⌉, skill equipment + 2 Supplies, description, Main Quest + Blocker Location) and drops you into Round 1. It also switches the first-visit tutorial off — that pop-up is a wall of text landing on top of the answer.
+- **"Choose a Perk for me"** in `LevelUpModal` — Level Up was a hard stop: forty Perks to read. It now picks an available Perk and resolves its pay-off the way a thoughtful player would (highest attribute, highest untagged skill, highest skills under rank 6).
+- Screen hints now **start collapsed** (`expandedHints`, renamed from `collapsedHints`) — the Director carries the instruction, so the hints are reference you open when you want them.
+
+Verified by a "too lazy to read" harness (`lazy.mjs`): start from an empty save, press **only** the recommended button, and take the obvious follow-through affordance. It plays **14+ Rounds unaided** — reaching Level 5 with 3 Side Quests and 2 NPCs met, travelling, fighting, looting, levelling, journalling and dying correctly — with 0 findings. Quick-start output is asserted rules-legal (SPECIAL sums 40, exactly 2 Tags, no skill over rank 5, HP = 5+END, Luck = ⌈LCK/2⌉, AP 0 capped by AGI, 2 Supplies, Level 1). Full regression re-run: static 0, hints 0, perks/endings 0, creation gates OK, persistence OK, 200 clicks with 0 hard failures, lint unchanged (21).
+
+---
+
 ## Chapter 3 (Character Creation) Rules Audit — ✅ DONE
 
 Full line-by-line audit of the creation flow against the Chapter 3 rulebook text. Verified correct: Population/Reputation ranges + sole-survivor skip, Linked-NPC 4-column rolls and all four NPC sub-tables, Vault Number 1-122, all 32 Known Vaults (numbers/truths/regions), the full 20-row G.O.A.T. table with ranks, the 17-entry Skill Item Table, 15+INT / INT-bonus skill pools with the 5-rank cap and exactly 2 Tags, HP = 5+END, Luck = ⌈LCK/2⌉, Level 1, AP = 0 capped by AGI, the 20-entry Goal table, all 10 Blocker types with correct ranges, outer-edge Blocker Location, and the Unknown-Location skip.

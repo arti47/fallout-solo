@@ -10,6 +10,8 @@ import Step4Vitals from './creation/Step4Vitals';
 import Step5Equipment from './creation/Step5Equipment';
 import Step6Description from './creation/Step6Description';
 import Step7Quest from './creation/Step7Quest';
+import { quickCreateCharacter } from '../utils/quickStart';
+import { Zap } from 'lucide-react';
 
 export default function CharacterCreation() {
   const [step, setStep] = useState(1);
@@ -34,6 +36,16 @@ export default function CharacterCreation() {
       if (!skills.some(k => k.rank > 0)) return 'Assign your skill ranks before continuing (Stage 3).';
     }
     return null;
+  };
+
+  const playNow = () => {
+    const made = quickCreateCharacter();
+    showAlert(
+      `${made.name}, of Vault ${made.vault}.\n\n` +
+      `Your quest: ${made.goal}\nIn your way: ${made.blocker}\n\n` +
+      `Everything is rolled. Just press the big green button each Round — it tells you exactly what to do.`
+    );
+    navigate('/round');
   };
 
   const handleNext = () => {
@@ -102,6 +114,21 @@ export default function CharacterCreation() {
         Vault-Tec Registration
       </h2>
       
+      {step === 1 && (
+        <div className="border-2 border-amber-400 p-3 mb-4 space-y-2 bg-[#1a1405]">
+          <button
+            onClick={playNow}
+            className="w-full border-2 border-amber-400 text-amber-400 p-4 font-bold uppercase text-base hover:bg-amber-400 hover:text-black transition-colors flex items-center justify-center gap-2 animate-pulse"
+          >
+            <Zap size={20} /> Play now — roll everything for me
+          </button>
+          <p className="text-xs normal-case text-center opacity-80">
+            Makes a complete, rules-legal Dweller in one tap and drops you into Round 1.
+            You can change any of it later. Or build your own below.
+          </p>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar uppercase">
         {step === 1 && <Step1Vault />}
         {step === 2 && <Step2Special onComplete={handleNext} />}
