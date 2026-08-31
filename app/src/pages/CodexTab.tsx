@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Search } from 'lucide-react';
 import { CODEX_CHAPTERS, searchCodex } from '../data/codex';
 import type { CodexChapter } from '../data/codex';
+import ScreenHint from '../components/ScreenHint';
 
 type Block =
   | { kind: 'heading'; level: number; text: string }
@@ -183,6 +184,8 @@ export default function CodexTab() {
       <h2 className="text-xl uppercase tracking-widest border-b-2 border-[#14FF00] pb-1">
         Codex — Wasteland Wanderer Rulebook
       </h2>
+
+      <ScreenHint id="codex" />
 
       {/* Search */}
       <div className="flex items-center gap-2 border border-[#14FF00] px-3 py-2">

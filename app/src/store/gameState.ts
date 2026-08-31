@@ -177,6 +177,10 @@ export interface GameState {
   soundEnabled: boolean;
   /** Tutorial tips already shown (keyed by route). */
   seenTutorials: string[];
+  /** Persistent per-screen "what to do here" signposts. */
+  hintsEnabled: boolean;
+  /** Screen hints the player has collapsed to a single line. */
+  collapsedHints: string[];
   
   // Combat Tracker
   combatActive: boolean;
@@ -205,6 +209,8 @@ export interface GameState {
   equipGear: (id: string) => void;
   consumeItem: (id: string) => void;
   toggleTutorial: () => void;
+  toggleHints: () => void;
+  toggleHintCollapsed: (id: string) => void;
   toggleSound: () => void;
   markTutorialSeen: (key: string) => void;
   setCurrentSector: (sector: number) => void;
@@ -337,7 +343,9 @@ export const getInitialGameData = () => ({
 
   tutorialEnabled: true,
   soundEnabled: true,
-  seenTutorials: [] as string[]
+  seenTutorials: [] as string[],
+  hintsEnabled: true,
+  collapsedHints: [] as string[]
 });
 
 export const useGameState = create<GameState>()(
@@ -430,6 +438,12 @@ export const useGameState = create<GameState>()(
         };
       }),
       toggleTutorial: () => set((state) => ({ tutorialEnabled: !state.tutorialEnabled })),
+      toggleHints: () => set((state) => ({ hintsEnabled: !state.hintsEnabled })),
+      toggleHintCollapsed: (id) => set((state) => ({
+        collapsedHints: state.collapsedHints.includes(id)
+          ? state.collapsedHints.filter(h => h !== id)
+          : [...state.collapsedHints, id]
+      })),
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
       markTutorialSeen: (key) => set((state) => ({
         seenTutorials: state.seenTutorials.includes(key) ? state.seenTutorials : [...state.seenTutorials, key]

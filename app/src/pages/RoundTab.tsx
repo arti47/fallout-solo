@@ -20,6 +20,7 @@ import { perkDifficulty, perkRerolls, perkTravelSupplies, perkPrompts, isRangedS
 import type { TestOutcome } from '../utils/skillTest';
 import LevelUpModal from '../components/LevelUpModal';
 import AnswerBox from '../components/AnswerBox';
+import ScreenHint from '../components/ScreenHint';
 import CombatView from '../components/CombatView';
 import type { PlayerCombatAction } from '../components/CombatView';
 import EpilogueModal from '../components/EpilogueModal';
@@ -1703,6 +1704,7 @@ export default function RoundTab() {
           <h2 className="text-xl font-bold tracking-widest">ROUND {round}</h2>
           <span className="text-sm opacity-70">Square {currentSector}</span>
         </div>
+        <ScreenHint id="combat" />
         <CombatView onExit={(toStage) => setStage(toStage)} initialAction={initialCombatAction} />
       </div>
     );
@@ -1732,6 +1734,7 @@ export default function RoundTab() {
       {/* ============ TRAVEL ============ */}
       {stage === 'travel' && (
         <div className="space-y-3">
+          <ScreenHint id="round-travel" />
           {/* ---- Round 1: the briefing a brand-new player needs ---- */}
           {round === 1 ? (
             <div className="border-2 border-amber-400 p-3 space-y-2 bg-[#1a1405]">
@@ -1895,6 +1898,7 @@ export default function RoundTab() {
         const danger = dangerOverride ?? autoDanger;
         return (
           <div className="space-y-3">
+            <ScreenHint id="round-encounter" />
             <div className={`border-2 p-3 space-y-2 ${enc.type === 'blocker' ? 'border-red-500' : 'border-[#14FF00]'} bg-[#051a05]`}>
               <h3 className={`font-bold ${enc.type === 'blocker' ? 'text-red-500' : 'text-white'}`}>{enc.title}</h3>
               <p className="text-sm normal-case opacity-90 whitespace-pre-line">{enc.description}</p>
@@ -2014,6 +2018,7 @@ export default function RoundTab() {
       {/* ============ ACTION ============ */}
       {stage === 'action' && (
         <div className="space-y-3">
+          <ScreenHint id="round-action" />
           {inDanger && (
             <div className="border-2 border-red-500 text-red-500 p-2 text-center font-bold animate-pulse">
               ⚠ IN DANGER — resolve the threat (De-escalate, Oppose, Outwit, Slaughter, or Retreat)
@@ -2222,6 +2227,7 @@ export default function RoundTab() {
       {/* ============ JOURNAL ============ */}
       {stage === 'journal' && (
         <div className="space-y-3">
+          <ScreenHint id="round-journal" />
           <div className="text-sm font-bold">=== Round {round} — {gameDate(day)} ===</div>
           {currentEncounter?.question && (
             <div className="border border-amber-400/50 p-2 space-y-1">
