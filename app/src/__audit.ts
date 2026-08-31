@@ -8,6 +8,8 @@ import * as npc from './data/npcTables';
 import * as ct from './data/characterTables';
 import * as qt from './data/questTables';
 import { CODEX_CHAPTERS } from './data/codex';
+import { renderTokens, indefiniteArticle } from './utils/tokens';
+import { SETTLEMENT_ENCOUNTERS, WASTELAND_ENCOUNTERS, COMBAT_STATES } from './data/encounters';
 
 const F: string[] = [];
 const fail = (m: string) => F.push(m);
@@ -164,6 +166,63 @@ for (let i = 0; i < 2000; i++) {
   const cb = qt.rollClearBlocker(1 + Math.floor(Math.random() * 12));
   if (!cb?.name) fail('rollClearBlocker empty');
 }
+
+// ============ BOOK TOKENS -> READABLE PROSE ============
+
+// 1. Article agreement
+[['Assaultron', 'an'], ['Raider', 'a'], ['Institute Scientist', 'an'], ['Eyebot', 'an'], ['NPC', 'an'], ['Brotherhood Knight', 'a']]
+  .forEach(([w, want]) => { if (indefiniteArticle(w, false) !== want) fail(`article: "${w}" -> ${indefiniteArticle(w, false)}, want ${want}`); });
+if (indefiniteArticle('Assaultron', true) !== 'An') fail('article: capitalisation lost');
+
+// 2. Realistic substitution over every encounter, with vowel- and
+//    consonant-initial values, checking the output is clean English.
+const NAMES = ['Terry Weaver', 'Ada Cole'];
+const FOES = ['Assaultron', 'Raider', 'Institute Scientist', 'Feral Ghoul'];
+const repl = (name: string, foe: string) => [
+  { pattern: /\[RAIDERS?\]/, value: foe },
+  { pattern: /\[CREATURES?\]/, value: foe },
+  { pattern: /\[SUPER MUTANTS?\]/, value: foe },
+  { pattern: /\[ROBOTS?\]/, value: foe },
+  { pattern: /\[FOES?\]/, value: foe },
+  { pattern: /\[FACTIONS?\]/, value: 'Raiders' },
+  { pattern: /\[DANGEROUS NPCS?\]/, value: name },
+  { pattern: /\[NPC\]/, value: name },
+  { pattern: /\[SIDE ?QUESTS?\]/, value: 'new Side Quest' },
+  { pattern: /\[CHEMS?\]/, value: 'Addictol' }
+];
+
+const all = [...SETTLEMENT_ENCOUNTERS, ...WASTELAND_ENCOUNTERS, ...COMBAT_STATES];
+for (const e of all) {
+  for (const name of NAMES) for (const foe of FOES) {
+    const out = renderTokens(`${e.name} ${(e as { description: string }).description}`, repl(name, foe));
+    if (/[[\]]/.test(out)) fail(`leftover bracket: ${out.slice(0, 90)}`);
+    if (/\bNpc\b/.test(out)) fail(`"Npc" casing: ${out.slice(0, 90)}`);
+    if (/\ba [AEIOU]/.test(out)) fail(`"a" before vowel: ${out.slice(0, 110)}`);
+    // Acronyms ("an NPC") legitimately take "an" despite the spelling.
+    if (/\ban (?![AEIOUaeiou])(?![A-Z]{2,})/.test(out)) fail(`"an" before consonant: ${out.slice(0, 110)}`);
+    if (/\ba a\b|\ban an\b|\ba an\b|\ban a\b/i.test(out)) fail(`doubled article: ${out.slice(0, 110)}`);
+    // The specific report: a name spliced in front of a common noun.
+    if (new RegExp(`${name} (settlers|wastelander|is visiting)`).test(out)) fail(`attributive name: ${out.slice(0, 110)}`);
+  }
+}
+
+// 3. Generated quests never show raw tokens.
+for (let i = 0; i < 4000; i++) {
+  const q = qt.generateSideQuest(13);
+  for (const [k, v] of Object.entries({ goal: q.goal, questions: q.questions, reward: q.rewardDescription })) {
+    if (/[[\]]/.test(String(v))) fail(`quest ${k} has a raw token: ${String(v).slice(0, 90)}`);
+    if (/\bNpc\b/.test(String(v))) fail(`quest ${k} shows "Npc": ${String(v).slice(0, 90)}`);
+  }
+}
+// Source tables still carry their tokens (we strip at generation, not in the data).
+if (!qt.QUEST_REWARDS.some(r => /\[/.test(r.description))) fail('QUEST_REWARDS lost its book tokens');
+if (!qt.GOAL_TYPES.some(g => g.goals.some(x => /\[/.test(x.goal)))) fail('GOAL_TYPES lost its book tokens');
+
+// 4. The exact reported string.
+const drunk = SETTLEMENT_ENCOUNTERS.find(e => e.name === 'Drunk and Disorderly')!;
+const rendered = renderTokens(drunk.description, repl('Terry Weaver', 'Raider'));
+if (rendered.includes('Two Terry Weaver settlers')) fail('the reported bug is still present');
+
 
 const uniq = [...new Set(F)];
 console.log(uniq.length ? uniq.join('\n') : 'NO STATIC FAULTS');
