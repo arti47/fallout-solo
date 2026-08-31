@@ -14,10 +14,33 @@ import Step7Quest from './creation/Step7Quest';
 export default function CharacterCreation() {
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
-  const { vault, mainQuest } = useGameState();
+  const { vault, mainQuest, special, skills } = useGameState();
   const { showAlert } = useUIState();
 
-  const handleNext = () => setStep((s) => Math.min(7, s + 1));
+  // Book invariants per stage (pg.61-69). "Next Step" used to be unconditional,
+  // so a player could walk past Stage 3 with unspent ranks or the wrong number
+  // of Tag skills and finish an illegal character.
+  const stageProblem = (n: number): string | null => {
+    if (n === 1 && !vault) return 'Generate your Vault before continuing (Stage 1).';
+    if (n === 2) {
+      const spent = Object.values(special).reduce((a, b) => a + b, 0);
+      // Every Attribute starts at 4 (28 total) and creation distributes +12.
+      if (spent < 40) return `You still have ${40 - spent} S.P.E.C.I.A.L. point(s) to spend.`;
+      if (spent > 40) return 'You have spent too many S.P.E.C.I.A.L. points.';
+    }
+    if (n === 3) {
+      const tags = skills.filter(k => k.isTag).length;
+      if (tags !== 2) return `Choose exactly 2 Tag skills (you have ${tags}).`;
+      if (!skills.some(k => k.rank > 0)) return 'Assign your skill ranks before continuing (Stage 3).';
+    }
+    return null;
+  };
+
+  const handleNext = () => {
+    const problem = stageProblem(step);
+    if (problem) { showAlert(problem); return; }
+    setStep((s) => Math.min(7, s + 1));
+  };
   const handlePrev = () => setStep((s) => Math.max(1, s - 1));
 
   const handleFinish = () => {
@@ -26,6 +49,12 @@ export default function CharacterCreation() {
       showAlert("Please generate a Vault in Step 1 first!");
       setStep(1);
       return;
+    }
+    // Re-check every earlier stage, so no illegal character can be finished by
+    // skipping ahead.
+    for (const n of [2, 3]) {
+      const problem = stageProblem(n);
+      if (problem) { showAlert(problem); setStep(n); return; }
     }
     if (!mainQuest) {
       showAlert("Please generate a Main Quest in Step 7!");

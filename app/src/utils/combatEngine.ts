@@ -3,7 +3,7 @@
 // Combat tab applies.
 import type { FoeAction, FoeTemplate } from '../data/bestiary';
 import type { GearItem } from '../store/gameState';
-import { rollChem, rollScrap, rollScavenge } from '../data/lootTables';
+import { rollChems, rollScrap, rollScavenge } from '../data/lootTables';
 
 export interface CombatFoeState {
   id: string;
@@ -399,6 +399,13 @@ export const resolveDefeat = (
   return { defeated: true, effects };
 };
 
+/** Bloody Mess (pg.152): after a Defeat, roll d20; at or under Luck the corpse
+ *  explodes and takes another Foe with it. Returns the roll and whether it hit. */
+export const rollBloodyMess = (playerLuck: number): { roll: number; gibs: boolean } => {
+  const r = d20();
+  return { roll: r, gibs: r <= playerLuck };
+};
+
 /** Loot from a Defeated foe (pg.99 + per-foe Always Carrying rules). */
 export const lootFoe = (template: FoeTemplate): { items: GearItem[]; log: string } => {
   const name = template.name.replace(/\s*\(.+\)$/, '');
@@ -406,11 +413,11 @@ export const lootFoe = (template: FoeTemplate): { items: GearItem[]; log: string
 
   switch (name) {
     case 'Raider':
-      items.push(rollChem());
+      items.push(...rollChems());
       break;
     case 'Psycho':
     case 'Raider Boss':
-      items.push(rollChem(), rollChem());
+      items.push(...rollChems(), ...rollChems());
       break;
     case 'Scavver':
       items.push(rollScrap());

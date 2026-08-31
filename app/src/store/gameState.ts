@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { perkOnTakeMaxHp, perkHealBonus } from '../utils/perkEffects';
+import type { FoeTemplate } from '../data/bestiary';
 
 export interface Special {
   S: number; P: number; E: number; C: number; I: number; A: number; L: number;
@@ -150,6 +152,13 @@ export interface GameState {
   scavengedThisRound: boolean;
   tradedThisRound: boolean;
   currentEncounter: EncounterInfo | null;
+  /** Foes generated for the CURRENT encounter, waiting to be fought. Persisted
+   *  so closing the app mid-encounter does not silently disarm the scene. */
+  encounterFoes: FoeTemplate[];
+  /** Generated scene notes shown under the encounter (NPCs, foes, quests…). */
+  encounterExtras: string[];
+  /** Auto-detected danger verdict for the current encounter. */
+  encounterDanger: boolean;
   /** Carried difficulty modifier for the NEXT skill test (from complications/boons). */
   nextTestModifier: number;
 
@@ -205,6 +214,7 @@ export interface GameState {
   setStage: (stage: RoundStage) => void;
   setDanger: (inDanger: boolean) => void;
   setEncounter: (encounter: EncounterInfo | null) => void;
+  setEncounterScene: (scene: { foes?: FoeTemplate[]; extras?: string[]; danger?: boolean }) => void;
   markScavenged: () => void;
   markTraded: () => void;
   completeRound: () => void;
@@ -212,6 +222,9 @@ export interface GameState {
 
   // Progression actions
   addPerk: (name: string) => void;
+  raiseAttribute: (attr: keyof Special) => void;
+  addTagSkill: (skillName: string) => void;
+  addSkillRank: (skillName: string, amount: number) => void;
   addInjury: (description: string) => void;
   removeInjury: (index: number) => void;
   addNpc: (npc: TrackedNpc) => void;
@@ -304,6 +317,9 @@ export const getInitialGameData = () => ({
   scavengedThisRound: false,
   tradedThisRound: false,
   currentEncounter: null as EncounterInfo | null,
+  encounterFoes: [] as FoeTemplate[],
+  encounterExtras: [] as string[],
+  encounterDanger: false,
   nextTestModifier: 0,
 
   perks: [] as { name: string; rank: number }[],
@@ -341,7 +357,9 @@ export const useGameState = create<GameState>()(
       updateHp: (amount) => set((state) => {
         // Max HP is reduced by rads
         const currentMaxHp = state.maxHp - state.rads;
-        return { hp: Math.max(0, Math.min(currentMaxHp, state.hp + amount)) };
+        // Fast Metabolism (pg.153): every heal is worth more. Damage is untouched.
+        const healed = amount > 0 ? amount + perkHealBonus(state.perks) : amount;
+        return { hp: Math.max(0, Math.min(currentMaxHp, state.hp + healed)) };
       }),
       updateRads: (amount) => set((state) => {
         const newRads = Math.max(0, state.rads + amount);
@@ -429,6 +447,11 @@ export const useGameState = create<GameState>()(
       setStage: (stage) => set({ stage }),
       setDanger: (inDanger) => set({ inDanger }),
       setEncounter: (currentEncounter) => set({ currentEncounter }),
+      setEncounterScene: ({ foes, extras, danger }) => set((state) => ({
+        encounterFoes: foes ?? state.encounterFoes,
+        encounterExtras: extras ?? state.encounterExtras,
+        encounterDanger: danger ?? state.encounterDanger
+      })),
       markScavenged: () => set({ scavengedThisRound: true }),
       markTraded: () => set({ tradedThisRound: true }),
       setNextTestModifier: (nextTestModifier) => set({ nextTestModifier }),
@@ -439,7 +462,10 @@ export const useGameState = create<GameState>()(
         inDanger: false,
         scavengedThisRound: false,
         tradedThisRound: false,
-        currentEncounter: null
+        currentEncounter: null,
+        encounterFoes: [],
+        encounterExtras: [],
+        encounterDanger: false
       })),
 
       // Progression
@@ -449,13 +475,31 @@ export const useGameState = create<GameState>()(
         const perks = existing
           ? state.perks.map(p => p.name === name ? { ...p, rank: p.rank + 1 } : p)
           : [...state.perks, { name, rank: 1 }];
+        // Perks with an immediate, choice-free effect apply here (Life Giver).
+        const bonusMaxHp = perkOnTakeMaxHp(name);
         return {
           perks,
           xp: state.xp - 1,
           level: state.level + 1,
-          journalText: state.journalText + `\n[SYSTEM] Level Up! Gained Perk: ${name}. Now Level ${state.level + 1}.\n`
+          maxHp: state.maxHp + bonusMaxHp,
+          hp: state.hp + bonusMaxHp,
+          journalText: state.journalText + `\n[SYSTEM] Level Up! Gained Perk: ${name}. Now Level ${state.level + 1}.${bonusMaxHp ? ` (+${bonusMaxHp} Max HP)` : ''}\n`
         };
       }),
+      // Perk pay-offs that need a player choice (S.P.E.C.I.A.L. Training,
+      // Skill Mastery, Skilled) are applied by these once the pick is made.
+      raiseAttribute: (attr) => set((state) => ({
+        special: { ...state.special, [attr]: Math.min(10, state.special[attr] + 1) },
+        journalText: state.journalText + `\n[SYSTEM] S.P.E.C.I.A.L. Training: ${attr} raised to ${Math.min(10, state.special[attr] + 1)}.\n`
+      })),
+      addTagSkill: (skillName) => set((state) => ({
+        skills: state.skills.map(k => k.name === skillName ? { ...k, isTag: true } : k),
+        journalText: state.journalText + `\n[SYSTEM] Skill Mastery: ${skillName} is now a Tag skill.\n`
+      })),
+      addSkillRank: (skillName, amount) => set((state) => ({
+        skills: state.skills.map(k => k.name === skillName ? { ...k, rank: Math.min(6, k.rank + amount) } : k),
+        journalText: state.journalText + `\n[SYSTEM] Skilled: ${skillName} +${amount} rank.\n`
+      })),
       addInjury: (description) => set((state) => ({
         injuries: [...state.injuries, description],
         journalText: state.journalText + `\n[SYSTEM] Suffered Injury: ${description}\n`
