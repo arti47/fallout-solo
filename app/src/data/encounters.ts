@@ -133,31 +133,31 @@ export interface EncounterEntry {
 }
 
 export const SETTLEMENT_ENCOUNTERS: EncounterEntry[] = [
-  { name: 'Siege', description: 'A [FACTION] is attacking the settlement. If you decide to oppose them, the settlement will remember your aid.', question: 'How well defended is the settlement? Could you use this attack to your advantage?' },
+  { name: 'Siege', description: '[FACTION] are attacking the settlement. If you decide to oppose them, the settlement will remember your aid.', question: 'How well defended is the settlement? Could you use this attack to your advantage?' },
   { name: 'Security', description: 'A patrol of what passes for the law around here is questioning residents. They demand to see your papers.', question: 'What are they looking for? How will they react if you refuse?' },
-  { name: 'Friendly Face', description: "Someone in the settlement recognizes you. If the settlement doesn't have an NPC, generate an [NPC]; otherwise choose a random NPC to be visiting.", question: 'What do they want?' },
-  { name: 'Gathering Crowd', description: 'A charismatic [NPC] is making a speech. People are listening intently.', question: 'What are they rallying for?' },
+  { name: 'Friendly Face', description: "Someone in the settlement recognizes you. If you know nobody here, that someone is [NPC]; otherwise it is a familiar face who happens to be visiting.", question: 'What do they want?' },
+  { name: 'Gathering Crowd', description: '[NPC] is making a charismatic speech. People are listening intently.', question: 'What are they rallying for?' },
   { name: 'Travelling Merchant', description: 'A friendly trader has set up shop in a back alley, offering rare goods. If you make the Trade Action this Round, you may roll twice for the [CONDITION] of any goods they have to sell and choose the best.', question: 'Why are they leaving soon?' },
-  { name: 'Drunk and Disorderly', description: 'Two [NPC] settlers are arguing over a pointless topic. One of them turns to you for backup.', question: 'Will you lose face if you stay out of it, or a few teeth if you get involved?' },
-  { name: 'Runaway Brahmin', description: 'A loaded pack brahmin breaks free, scattering supplies everywhere as its owner [NPC] runs after it.', question: 'Can you help catch it, or grab something before its owner notices?' },
-  { name: 'Street Performer', description: 'An [NPC] wastelander is juggling knives, playing music, or doing card tricks for caps.', question: 'Are they actually talented, or just a distraction for a pickpocket?' },
+  { name: 'Drunk and Disorderly', description: 'Two settlers are arguing over a pointless topic. One of them, [NPC], turns to you for backup.', question: 'Will you lose face if you stay out of it, or a few teeth if you get involved?' },
+  { name: 'Runaway Brahmin', description: 'A loaded pack brahmin breaks free, scattering supplies everywhere as its owner, [NPC], runs after it.', question: 'Can you help catch it, or grab something before its owner notices?' },
+  { name: 'Street Performer', description: 'A wastelander, [NPC], is juggling knives, playing music, or doing card tricks for caps.', question: 'Are they actually talented, or just a distraction for a pickpocket?' },
   { name: 'Stray', description: 'A scruffy-looking Dog watches you from the shadows, tail wagging hopefully.', question: 'Does it belong to someone, or is it looking for a new home?' },
   { name: 'Mysterious Note', description: 'A scrap of paper is slipped into your pocket without explanation. Gain a [SIDE QUEST].', question: "Who gave you this, and why didn't they show their face?" },
   { name: 'Skeleton', description: "Either pre-War or more recent, the body at the settlement's entrance tells a story of someone's final moments.", question: 'These bones were a person once; how did they die?' },
   { name: 'Border Town', description: 'The Settlement is built on the border of a new location. You may choose to immediately Travel to an unexplored adjacent Location. If you do, journal about this discovery and then begin a new Round.', question: 'Would you be able to find this path again?' },
   { name: 'Clue', description: "Choose a side quest you have yet to complete. There is something related to that side quest here, from the item you're searching for to another [NPC] with similar goals.", question: 'How does this forward your goals? Does it also complicate them?' },
   { name: 'A Symbol of Hope', description: 'There is something here that reminds you of your purpose.', question: 'What is it?' },
-  { name: 'Mercenary Squatters', description: 'A band of [DANGEROUS NPCS] have moved into the settlement and refuse to leave without good reason. They are disrupting trade and people and could turn violent at a moment\'s notice.', question: 'Who are they? Why are they here, and what could I gain by moving them on?' },
-  { name: 'Traveller', description: 'A non-local [NPC] is visiting the town and catches your eye.', question: "If you've met this NPC before, how might their opinion of you change? Why are they here?" },
+  { name: 'Mercenary Squatters', description: 'A band of mercenaries led by [DANGEROUS NPC] have moved into the settlement and refuse to leave without good reason. They are disrupting trade and people and could turn violent at a moment\'s notice.', question: 'Who are they? Why are they here, and what could I gain by moving them on?' },
+  { name: 'Traveller', description: '[NPC], a non-local, is visiting the town and catches your eye.', question: "If you've met this NPC before, how might their opinion of you change? Why are they here?" },
   { name: 'Billboard', description: "An old advertisement, torn and faded, sits in the center of the settlement — the cause not only of the town's name, but a large portion of its community.", question: 'What does it advertise? Why is it ironic?' },
-  { name: 'Charity', description: 'A cough can be heard from the side of the street. Huddled against the corrugated iron is the blanketed shape of an unfortunate [NPC].', question: 'What draws your eye to them? Why can they not thrive in this settlement?' },
+  { name: 'Charity', description: 'A cough can be heard from the side of the street. Huddled against the corrugated iron is the blanketed shape of [NPC], down on their luck.', question: 'What draws your eye to them? Why can they not thrive in this settlement?' },
   { name: 'Trader', description: 'A suspicious trader offers deals too good to be true. You can make the Trade Action with them, halving the cost of whatever you buy (rounding up).', question: 'Have you seen the trader before? Why do you trust them this time?' },
   { name: 'Incursion', description: 'Somehow, a [FOE] has made their way into the settlement, and you appear to be the first living soul to know.', question: 'Why and how are they here?' }
 ];
 
 // ===================== WASTELAND ENCOUNTERS (pg.164-165) =====================
 export const WASTELAND_ENCOUNTERS: EncounterEntry[] = [
-  { name: 'Help!', description: 'An [NPC] is surrounded by [FOES]. If you oppose the foes here, the NPC will immediately give you a [SIDE QUEST].', question: 'Perhaps choosing not to help them would aid you in your next action?' },
+  { name: 'Help!', description: '[NPC] is surrounded by [FOES]. If you oppose the foes here, they will immediately give you a [SIDE QUEST].', question: 'Perhaps choosing not to help them would aid you in your next action?' },
   { name: 'Hunted', description: 'A pack of hungry [CREATURES] has picked up your scent.', question: 'Are the creatures hungry or territorial?' },
   { name: 'Raiders', description: 'A group of [RAIDERS] are in the area.', question: 'Why are they here? What would they do if you failed to Oppose them?' },
   { name: 'Not Your Business', description: 'You hear distant gunfire, then silence.', question: 'Perhaps your next encounter will explain the story you missed.' },
@@ -168,13 +168,13 @@ export const WASTELAND_ENCOUNTERS: EncounterEntry[] = [
   { name: 'Radstorm', description: 'A radstorm rolls in fast. Your Location gains the Irradiated Truth until the end of the Round.', question: 'How could your Chems and surroundings help you survive?' },
   { name: 'Holotape', description: 'An old Holotape is buried in the dirt. Playing it reveals a message, leading to a [SIDE QUEST].', question: 'What [NPC] left this here?' },
   { name: 'Malfunctioning Robot', description: 'A [ROBOT] is repeating the same phrase over and over and over.', question: 'What is it saying?' },
-  { name: 'Lost Child', description: 'A small child [NPC] is wandering the Wasteland, clearly lost.', question: 'Where are their parents, and why were they left alone?' },
-  { name: 'War Never Changes…', description: 'A [FOE] in open conflict with a [DANGEROUS NPC].', question: 'What has caused this fight? What do each side have to gain from this?' },
-  { name: 'Stolen Item', description: 'A [DANGEROUS NPC] has captured an [NPC] and seems to be threatening them for information on a stolen item.', question: 'Do you intervene, or mind your own business?' },
+  { name: 'Lost Child', description: 'A small child, [NPC], is wandering the Wasteland, clearly lost.', question: 'Where are their parents, and why were they left alone?' },
+  { name: 'War Never Changes…', description: 'A [FOE] in open conflict with [DANGEROUS NPC].', question: 'What has caused this fight? What do each side have to gain from this?' },
+  { name: 'Stolen Item', description: '[DANGEROUS NPC] has captured [NPC] and seems to be threatening them for information on a stolen item.', question: 'Do you intervene, or mind your own business?' },
   { name: 'Supplies', description: 'A small settlement has been abandoned and picked clean — barring a single dose of a [CHEM] you find square in the center of town.', question: 'Who did these belong to?' },
   { name: 'Tracks', description: 'Bloodied footprints lead directly inside a cave or building; even a cursory glance reveals they belong to a [FOE]. Who knows what they\'re doing in there?', question: 'How have they defended themselves? Are they dangerous?' },
   { name: 'Mutants…', description: 'A [SUPER MUTANT] war-tribe is in the area.', question: "What is the tribe's style? What do they want?" },
-  { name: 'Musician', description: 'An elderly busker [NPC] plays old songs for a different age.', question: 'The cap in front of him — is it empty or full? Does his music fill you with hope or nostalgia?' },
+  { name: 'Musician', description: 'An elderly busker, [NPC], plays old songs for a different age.', question: 'The cap in front of him — is it empty or full? Does his music fill you with hope or nostalgia?' },
   { name: 'Stories', description: 'A half-dead traveller lies on the side of the road, coughing as they warn of dangers in a nearby location. Add the Mysterious Danger truth to the location rolled.', question: 'What type of danger did the traveller speak of? Monsters, raiders, radiation, or something stranger still?' },
   { name: 'Weird Wasteland', description: 'A [FOE] is found in an unusual circumstance.', question: 'What situation is the Foe in? Why and how did they get in that situation?' }
 ];

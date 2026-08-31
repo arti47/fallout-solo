@@ -26,6 +26,7 @@ import type { PlayerCombatAction } from '../components/CombatView';
 import EpilogueModal from '../components/EpilogueModal';
 import type { EpilogueKind } from '../components/EpilogueModal';
 import { sfx } from '../utils/sound';
+import { renderTokens } from '../utils/tokens';
 import { Footprints, Zap, Swords, Book, ChevronRight, Dices, MessageCircle, Brain, Wind, PlusCircle, AlertTriangle, ShieldCheck, Compass, Flag, HelpCircle, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -1211,7 +1212,7 @@ export default function RoundTab() {
       const line = `New Side Quest [${quest.goalType}]: ${quest.goal} (Sq.${quest.location}, Reward: ${quest.rewardName})`;
       newExtras.push(line);
       journalLines.push(line);
-      repl.push({ token: /\[SIDE ?QUESTS?\]/gi, value: 'a new Side Quest' });
+      repl.push({ token: /\[SIDE ?QUESTS?\]/gi, value: 'new Side Quest' });
     }
     if (/\[CHEM\]/.test(text)) {
       const chems = rollChems();
@@ -1228,16 +1229,10 @@ export default function RoundTab() {
     setEncounterScene({ danger: threat });
     if (journalLines.length > 0) appendJournal(journalLines.join('\n'));
 
-    // Substitute the recorded tokens, then strip any leftover bracket tokens
-    // (e.g. [CONDITION], [INJURY]) down to plain words so none show raw.
-    const resolve = (s: string) => {
-      let out = s;
-      for (const { token, value } of repl) out = out.replace(token, value);
-      return out.replace(/\[([A-Za-z][A-Za-z ]*?)\]/g, (_m, w) => {
-        const word = String(w).toLowerCase();
-        return word.charAt(0).toUpperCase() + word.slice(1);
-      });
-    };
+    // Substitute the recorded tokens (fixing the indefinite article in front of
+    // each), then strip any leftover bracket token down to a plain word.
+    const resolve = (text: string) =>
+      renderTokens(text, repl.map(r => ({ pattern: r.token, value: r.value })));
     return { ...enc, title: resolve(enc.title), description: resolve(enc.description) };
   };
 

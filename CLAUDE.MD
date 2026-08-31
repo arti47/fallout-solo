@@ -265,6 +265,19 @@ Verified headless: the bar and correct summary on all six reference tabs and all
 
 ---
 
+## Book Tokens → Readable Prose — ✅ DONE
+
+Reported in play: the Encounter read **"Two Terry Weaver settlers are arguing…"**. The rulebook writes `[NPC]` as a cross-reference ("generate an [NPC]"), so splicing a generated name straight in produced broken English wherever the token sat in an *attributive* position rather than a name position.
+
+- **`utils/tokens.ts`** (new): `resolveTokens` substitutes a token **and** re-derives the indefinite article in front of it (so "a [FOE]" becomes "an Assaultron", not "a Assaultron"); `stripTokens` reduces anything left to a plain word, keeping acronyms upper-case (`[NPC]` → "NPC", never "Npc"); `renderTokens` does both. `indefiniteArticle` knows that letter-initial acronyms are spoken with a leading vowel ("an NPC"). `RoundTab`'s local resolver was replaced by this.
+- **14 encounter texts rewritten** (`encounters.ts`) so every `[NPC]`/`[DANGEROUS NPC]` token sits where a name reads naturally — appositives ("One of them, [NPC], turns to you…", "An elderly busker, [NPC], plays…") or as the subject ("[NPC] is surrounded by [FOES]"). The tokens still drive generation; only the phrasing changed. Also fixed `A [FACTION] is attacking` → `[FACTION] are attacking` (faction names are plural).
+- **`Gain a [SIDE QUEST]` produced "Gain a a new Side Quest"** — the replacement value carried its own article. Values are now bare noun phrases and the article comes from the sentence.
+- **Side Quest text never resolved its tokens at all**, so quest goals, prompts and reward descriptions showed raw `[NPC]`, `[FACTION]`, `[QUANTITY]`, `[CHEMS]` to the player. `generateSideQuest` now strips them at generation, so the store, the Journal and the Story export are all clean. The source tables keep their book tokens.
+
+Covered by the audit harness (`src/__audit.ts`): every encounter and Combat State rendered against vowel- and consonant-initial names and foes, asserting no leftover brackets, no "Npc", no mis-agreeing article, no doubled article and no name spliced in front of a common noun; plus 4,000 generated Side Quests checked for raw tokens.
+
+---
+
 ## Chapter 3 (Character Creation) Rules Audit — ✅ DONE
 
 Full line-by-line audit of the creation flow against the Chapter 3 rulebook text. Verified correct: Population/Reputation ranges + sole-survivor skip, Linked-NPC 4-column rolls and all four NPC sub-tables, Vault Number 1-122, all 32 Known Vaults (numbers/truths/regions), the full 20-row G.O.A.T. table with ranks, the 17-entry Skill Item Table, 15+INT / INT-bonus skill pools with the 5-rank cap and exactly 2 Tags, HP = 5+END, Luck = ⌈LCK/2⌉, Level 1, AP = 0 capped by AGI, the 20-entry Goal table, all 10 Blocker types with correct ranges, outer-edge Blocker Location, and the Unknown-Location skip.

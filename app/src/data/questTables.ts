@@ -2,10 +2,12 @@
 // (pg.194-216): Rewards, the 18 Goal Types with every Goal and its narrative
 // prompt questions, the Main Quest Blocker table (pg.74-75), and the
 // Clear Blocker table (pg.158).
+import { stripTokens } from '../utils/tokens';
 
 const roll = (max: number) => Math.floor(Math.random() * max) + 1;
 
 // ===================== SIDE QUEST REWARDS (pg.194-196) =====================
+
 export interface QuestReward {
   range: [number, number];
   name: string;
@@ -388,10 +390,10 @@ export const generateSideQuest = (currentLocation?: number): SideQuest => {
   }
   return {
     rewardName: reward.name,
-    rewardDescription: reward.description,
+    rewardDescription: stripTokens(reward.description),
     goalType: type.name,
-    goal: goal.goal,
-    questions: goal.questions,
+    goal: stripTokens(goal.goal),
+    questions: stripTokens(goal.questions),
     location,
     status: 'Active'
   };
