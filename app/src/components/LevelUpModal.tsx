@@ -4,6 +4,8 @@ import { useGameState } from '../store/gameState';
 import { PERKS, meetsPerkRequirements } from '../data/perks';
 import { sfx } from '../utils/sound';
 import type { Perk, Special as SpecialAbbrev } from '../data/perks';
+import { perkOnTake, untaggedSkills } from '../utils/perkEffects';
+import type { Special } from '../store/gameState';
 
 interface Props {
   onClose: () => void;
@@ -15,8 +17,21 @@ const ATTR_MAP: Record<string, SpecialAbbrev> = {
 };
 
 export default function LevelUpModal({ onClose }: Props) {
-  const { xp, level, special, perks, addPerk } = useGameState();
+  const { xp, level, special, skills, perks, addPerk, raiseAttribute, addTagSkill, addSkillRank } = useGameState();
   const [filter, setFilter] = useState<'available' | 'all'>('available');
+  // A perk whose pay-off still needs the player to pick something.
+  const [pending, setPending] = useState<{ name: string; choose: 'attribute' | 'tagSkill' | 'skillRanks' } | null>(null);
+  const [ranksLeft, setRanksLeft] = useState(0);
+
+  const take = (perk: Perk) => {
+    sfx.levelUp();
+    addPerk(perk.name);
+    const onTake = perkOnTake(perk.name);
+    if (onTake) {
+      setPending({ name: perk.name, choose: onTake.choose });
+      setRanksLeft(onTake.ranks ?? 1);
+    }
+  };
 
   const attributes: Partial<Record<SpecialAbbrev, number>> = {};
   Object.entries(special).forEach(([k, v]) => { attributes[ATTR_MAP[k]] = v; });
@@ -41,7 +56,7 @@ export default function LevelUpModal({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="bg-black border-2 border-[#14FF00] w-full max-w-lg p-4 uppercase max-h-[85vh] flex flex-col">
+      <div className="relative bg-black border-2 border-[#14FF00] w-full max-w-lg p-4 uppercase max-h-[85vh] flex flex-col">
         <div className="flex justify-between items-center border-b-2 border-[#14FF00] pb-2 mb-3">
           <h2 className="text-xl font-bold">Level Up — Choose a Perk</h2>
           <button onClick={onClose} className="hover:text-white"><X size={20} /></button>
@@ -79,7 +94,7 @@ export default function LevelUpModal({ onClose }: Props) {
                     <div className="text-xs opacity-70">Req: {requirementText(perk)}{perk.ranks !== 1 ? ` • Ranks: ${perk.ranks === Infinity ? 'Unlimited' : perk.ranks}` : ''}</div>
                   </div>
                   <button
-                    onClick={() => { sfx.levelUp(); addPerk(perk.name); }}
+                    onClick={() => take(perk)}
                     disabled={!available}
                     className="border border-[#14FF00] px-3 py-1 text-sm hover:bg-[#14FF00] hover:text-black disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#14FF00] shrink-0"
                   >
@@ -93,6 +108,75 @@ export default function LevelUpModal({ onClose }: Props) {
             );
           })}
         </div>
+
+        {/* ---- Perk pay-offs that need a choice (pg.150-157) ---- */}
+        {pending && (
+          <div className="absolute inset-0 z-10 bg-black/95 flex items-center justify-center p-4">
+            <div className="border-2 border-amber-400 bg-black w-full max-w-sm p-4 space-y-3 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <h3 className="font-bold text-amber-400">{pending.name}</h3>
+
+              {pending.choose === 'attribute' && (
+                <>
+                  <p className="text-xs normal-case opacity-80">Raise one S.P.E.C.I.A.L. by 1 (max 10).</p>
+                  <div className="grid grid-cols-4 gap-1">
+                    {(Object.keys(special) as (keyof Special)[]).map(k => (
+                      <button
+                        key={k}
+                        disabled={special[k] >= 10}
+                        onClick={() => { raiseAttribute(k); setPending(null); }}
+                        className="border border-amber-400 p-2 text-sm hover:bg-amber-400 hover:text-black disabled:opacity-30"
+                      >
+                        {k} {special[k]}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {pending.choose === 'tagSkill' && (
+                <>
+                  <p className="text-xs normal-case opacity-80">Choose an additional Tag skill.</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {untaggedSkills(skills).map(sk => (
+                      <button
+                        key={sk.name}
+                        onClick={() => { addTagSkill(sk.name); setPending(null); }}
+                        className="border border-amber-400 p-1.5 text-xs text-left hover:bg-amber-400 hover:text-black"
+                      >
+                        {sk.name} ({sk.rank})
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {pending.choose === 'skillRanks' && (
+                <>
+                  <p className="text-xs normal-case opacity-80">
+                    Spend {ranksLeft} rank{ranksLeft === 1 ? '' : 's'} — two Skills at +1, or one Skill at +2. No Skill may exceed 6.
+                  </p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {skills.map(sk => (
+                      <button
+                        key={sk.name}
+                        disabled={sk.rank >= 6}
+                        onClick={() => {
+                          addSkillRank(sk.name, 1);
+                          const left = ranksLeft - 1;
+                          setRanksLeft(left);
+                          if (left <= 0) setPending(null);
+                        }}
+                        className="border border-amber-400 p-1.5 text-xs text-left hover:bg-amber-400 hover:text-black disabled:opacity-30"
+                      >
+                        {sk.name} ({sk.rank})
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

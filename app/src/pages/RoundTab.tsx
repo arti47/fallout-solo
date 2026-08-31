@@ -12,10 +12,11 @@ import { rollFaction, generateFullNpc, generateDangerousNpc } from '../data/npcT
 import { generateFoeEncounter, rollSettlementReputation, shiftReputation, rollInjury } from '../data/characterTables';
 import type { Reputation, FoeType } from '../data/characterTables';
 import { generateSideQuest, rollClearBlocker, rollMainQuestBlocker, rollQuestReward } from '../data/questTables';
-import { rollScavenge, rollQuantity, rollCondition, rollArmorMod, rollWeaponMod, rollChem, rollWeapon, rollArmor } from '../data/lootTables';
+import { rollScavenge, rollQuantity, rollCondition, rollArmorMod, rollWeaponMod, rollChems, rollWeapon, rollArmor } from '../data/lootTables';
 import { ACTIONS } from '../data/actions';
 import type { GameAction } from '../data/actions';
 import { runSkillTest, rerollWorstDie } from '../utils/skillTest';
+import { perkDifficulty, perkRerolls, perkTravelSupplies, perkPrompts, isRangedSkill } from '../utils/perkEffects';
 import type { TestOutcome } from '../utils/skillTest';
 import LevelUpModal from '../components/LevelUpModal';
 import AnswerBox from '../components/AnswerBox';
@@ -69,7 +70,7 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
     special, skills, ap, luck, caps, updateAp, updateLuck, updateCaps, appendJournal, updateSupplies,
     updateHp, addGear, removeGear, gear, injuries, removeInjury, currentSector, updateSectorData,
     sectorData, setDanger, markScavenged, markTraded, addNpc, addSideQuest, tradedThisRound,
-    addInjury, nextTestModifier, setNextTestModifier, hp, maxHp, rads, supplies
+    addInjury, nextTestModifier, setNextTestModifier, hp, maxHp, rads, supplies, perks
   } = useGameState();
 
   const effectiveMaxHp = Math.max(1, maxHp - rads);
@@ -276,7 +277,20 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
 
   const baseDifficulty = typeof action.difficulty === 'number' ? action.difficulty : 1;
   const modifierDelta = activeModifiers.reduce((sum, i) => sum + (action.modifiers[i].direction === '+' ? 1 : -1), 0);
-  const difficulty = Math.max(0, Math.min(5, baseDifficulty + modifierDelta + (repApplied ? repDelta : 0) + autoDelta));
+  // Perks that automatically change this test's Difficulty (pg.150-157).
+  const perkCtx = {
+    action: action.name,
+    skill: solution?.skill,
+    attribute: solution?.attribute && solution.attribute !== 'Special'
+      ? ATTR_KEY_MAP[solution.attribute] : undefined,
+    ranged: isRangedSkill(solution?.skill),
+    hpBelowHalf: hp * 2 < effectiveMaxHp
+  };
+  const perkMods = perkDifficulty(perks, perkCtx);
+  const [perkModsOff, setPerkModsOff] = useState(false);
+  const perkDelta = perkModsOff ? 0 : perkMods.delta;
+  const perkFreeRerolls = perkRerolls(perks, perkCtx);
+  const difficulty = Math.max(0, Math.min(5, baseDifficulty + modifierDelta + (repApplied ? repDelta : 0) + autoDelta + perkDelta));
 
   const applyOutcome = (result: TestOutcome): string[] => {
     const notes: string[] = [];
@@ -493,6 +507,18 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
     appendJournal(`Re-rolled one die (1 AP): ${next.rolls.join(', ')} → ${next.passed ? 'PASSED' : 'FAILED'}`);
   };
 
+  // Perk re-rolls (Ghost, Infiltrator, Black Widow/Lady Killer, Can do!) are
+  // free — they cost no AP and are separate from the AP re-roll.
+  const [perkRerollUsed, setPerkRerollUsed] = useState(false);
+  const handlePerkReroll = (label: string) => {
+    if (!outcome || perkRerollUsed) return;
+    const next = rerollWorstDie(outcome, difficulty);
+    setPerkRerollUsed(true);
+    setOutcome(next);
+    setBonusNotes(applyOutcome(next));
+    appendJournal(`${label}: re-rolled → ${next.rolls.join(', ')} → ${next.passed ? 'PASSED' : 'FAILED'}`);
+  };
+
   const claimExtra = (index: number) => {
     if (ap < 1 || claimedExtras.includes(index)) return;
     updateAp(-1);
@@ -578,6 +604,25 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
             Spend 1 AP: Re-roll worst die
           </button>
         )}
+
+        {!perkRerollUsed && !outcome.passed && perkFreeRerolls.map(label => (
+          <button key={label} onClick={() => handlePerkReroll(label)}
+            className="w-full border border-cyan-400 text-cyan-400 p-2 text-xs normal-case hover:bg-cyan-400 hover:text-black">
+            {label} (free)
+          </button>
+        ))}
+
+        {(() => {
+          const at = action.name === 'Modify and Repair Gear' ? 'modrepair'
+            : ['Scavenge', 'Find Supplies'].includes(action.name) ? 'scavenge' : null;
+          const prompts = at ? perkPrompts(perks, at) : [];
+          return prompts.length > 0 && outcome.passed ? (
+            <div className="border border-cyan-400/50 p-2 text-[11px] normal-case space-y-1">
+              <div className="font-bold uppercase text-cyan-400">Your perks apply here:</div>
+              {prompts.map(t => <div key={t} className="text-cyan-400">• {t}</div>)}
+            </div>
+          ) : null;
+        })()}
 
         <div className="text-sm normal-case space-y-1 border-t border-[#14FF00]/30 pt-2">
           {(outcome.passed ? action.success : action.failure).map((s, i) => (
@@ -775,6 +820,18 @@ function ActionResolver({ action, onDone, onFoes }: { action: GameAction; onDone
         })}
       </div>
 
+      {perkMods.labels.length > 0 && (
+        <div>
+          <div className="text-xs font-bold mb-1">PERKS (tap to override):</div>
+          <button
+            onClick={() => setPerkModsOff(!perkModsOff)}
+            className={`block w-full text-left text-xs normal-case border p-1.5 mb-1 ${!perkModsOff ? 'bg-cyan-400/20 border-cyan-400 text-cyan-400' : 'border-cyan-400/30 line-through opacity-50'}`}
+          >
+            <span className="font-bold">[{perkMods.delta > 0 ? '+' : ''}{perkMods.delta}]</span> {perkMods.labels.join(' • ')}
+          </button>
+        </div>
+      )}
+
       {(repDelta !== 0 || autoMods.length > 0) && (
         <div>
           <div className="text-xs font-bold mb-1">AUTO-DETECTED (tap to override):</div>
@@ -875,19 +932,22 @@ export default function RoundTab() {
     setStage, setDanger, setEncounter, completeRound, setCurrentSector,
     updateSectorData, updateSupplies, updateHp, updateRads, updateLuck, updateXp,
     appendJournal, setMainQuest, level, setSideQuestStatus,
-    startCombat, setCombatState, updateCaps, addGear, combatActive
+    startCombat, setCombatState, updateCaps, addGear, combatActive, perks,
+    encounterFoes, encounterExtras, encounterDanger, setEncounterScene
   } = useGameState();
   const { showAlert } = useUIState();
 
   const [selectedSquare, setSelectedSquare] = useState<number | null>(null);
-  const [dangerChecks, setDangerChecks] = useState<boolean[]>([false, false, false]);
   const [activeAction, setActiveAction] = useState<GameAction | null>(null);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [levelAtOpen, setLevelAtOpen] = useState(0);
   const [journalDraft, setJournalDraft] = useState('');
-  const [extras, setExtras] = useState<string[]>([]);
-  /** Foes rolled for this encounter, ready to fight. */
-  const [encounterFoes, setEncounterFoes] = useState<FoeTemplate[]>([]);
+  // The scene (foes, notes, danger verdict) lives in the store so it survives a
+  // reload mid-encounter — this is an installed PWA and people close it.
+  const extras = encounterExtras;
+  const setExtras = (v: string[]) => setEncounterScene({ extras: v });
+  const setEncounterFoes = (v: FoeTemplate[] | ((prev: FoeTemplate[]) => FoeTemplate[])) =>
+    setEncounterScene({ foes: typeof v === 'function' ? v(useGameState.getState().encounterFoes as FoeTemplate[]) : v });
   /** Encounter "Add to scene" GM-tools menu open state. */
   const [sceneMenuOpen, setSceneMenuOpen] = useState(false);
   /** Player override of the auto-detected danger verdict (null = use auto). */
@@ -900,6 +960,8 @@ export default function RoundTab() {
   const [poddsRoll, setPoddsRoll] = useState<number | null>(null);
   /** Which ending's Epilogue is open (null = not ending the story). */
   const [epilogueKind, setEpilogueKind] = useState<EpilogueKind | null>(null);
+  /** A Clear Blocker result of 21+ — the player must choose how it resolves. */
+  const [blockerOutcome, setBlockerOutcome] = useState<{ name: string; effect: string; forcedWin: boolean } | null>(null);
   /** "End your story" disclosure — kept collapsed so it is never a misclick. */
   const [endMenuOpen, setEndMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -970,6 +1032,12 @@ export default function RoundTab() {
     } else {
       updateHp(-2);
       appendJournal('No supplies for the road — the hunger takes its toll. (-2 HP)');
+    }
+    // Hunter (pg.154): you forage as you go.
+    const foraged = perkTravelSupplies(perks);
+    if (foraged > 0) {
+      updateSupplies(foraged);
+      appendJournal(`Hunter: foraged ${foraged} Supply on the road.`);
     }
     setCurrentSector(selectedSquare);
 
@@ -1145,9 +1213,10 @@ export default function RoundTab() {
       repl.push({ token: /\[SIDE ?QUESTS?\]/gi, value: 'a new Side Quest' });
     }
     if (/\[CHEM\]/.test(text)) {
-      const chem = rollChem();
-      useGameState.getState().addGear(chem);
-      const line = `Found a Chem: ${chem.name}.`;
+      const chems = rollChems();
+      chems.forEach(c => useGameState.getState().addGear(c));
+      const chem = chems[0];
+      const line = `Found ${chems.length > 1 ? 'Chems' : 'a Chem'}: ${chems.map(c => c.name).join(', ')}.`;
       newExtras.push(line);
       journalLines.push(line);
       repl.push({ token: /\[CHEMS?\]/gi, value: chem.name });
@@ -1155,7 +1224,7 @@ export default function RoundTab() {
 
     setExtras(newExtras);
     setEncounterFoes(foes);
-    setDangerChecks([threat, false, false]);
+    setEncounterScene({ danger: threat });
     if (journalLines.length > 0) appendJournal(journalLines.join('\n'));
 
     // Substitute the recorded tokens, then strip any leftover bracket tokens
@@ -1286,7 +1355,6 @@ export default function RoundTab() {
       appendJournal('You push on through the radiation. (+1 Rad)');
     }
     setDanger(danger);
-    setDangerChecks([false, false, false]);
     setExtras([]);
     setStage('action');
   };
@@ -1312,9 +1380,35 @@ export default function RoundTab() {
       appendJournal(`Cleared the Blocker! But the road goes on — NEW BLOCKER: ${newBlocker.name}${newLocation ? ` at Square ${newLocation}` : ' (location unknown)'}. (+1 XP, +2 Luck)`);
       showAlert(`Blocker cleared! A new Blocker appears: ${newBlocker.name}. (+1 XP, +2 Luck Points)`);
     } else {
+      // 21+ (pg.151): the roll offers a genuine choice — take a new Blocker and
+      // keep going, or end the Quest here at the cost the result names. From
+      // Redemption (42+) upward there is no new-Blocker option: you have won.
+      const forcedWin = ['Redemption', 'Reunion', 'Unexpected Reward', 'True Victory'].includes(result.name);
       appendJournal(`CLEAR BLOCKER — ${result.name}: ${result.effect}`);
-      showAlert(`${result.name}: ${result.effect}\n\nIf you succeed at your Quest, use "Complete Main Quest" and write your Epilogue.`);
+      setBlockerOutcome({ name: result.name, effect: result.effect, forcedWin });
     }
+  };
+
+  /** Take a fresh Blocker instead of resolving the Quest (pg.151). */
+  const takeNewBlocker = () => {
+    if (!mainQuest) return;
+    const nb = rollMainQuestBlocker();
+    const loc = nb.name === 'Unknown Location' ? null : EDGE_SQUARES[Math.floor(Math.random() * EDGE_SQUARES.length)];
+    setMainQuest({ ...mainQuest, blocker: nb.name, blockerDesc: nb.description, blockerLocation: loc });
+    updateXp(1);
+    updateLuck(2);
+    appendJournal(`You press on — NEW BLOCKER: ${nb.name}${loc ? ` at Square ${loc}` : ' (location unknown)'}. (+1 XP, +2 Luck)`);
+    setBlockerOutcome(null);
+  };
+
+  /** Resolve the Main Quest from a Clear Blocker result and write the Epilogue. */
+  const resolveQuestFromBlocker = (name: string, effect: string, won: boolean) => {
+    if (!mainQuest) return;
+    setMainQuest({ ...mainQuest, status: won ? 'Completed' : 'Abandoned' });
+    if (won) updateXp(3);
+    appendJournal(`MAIN QUEST ${won ? 'COMPLETE' : 'ABANDONED'} — ${name}: ${effect}${won ? ' (+3 XP)' : ''}`);
+    setBlockerOutcome(null);
+    setEpilogueKind(won ? 'quest' : 'settle');
   };
 
   const completeMainQuest = () => {
@@ -1395,11 +1489,9 @@ export default function RoundTab() {
         const count = rewardName === 'Chems' ? rollQuantity().amount : 5;
         const names: string[] = [];
         for (let i = 0; i < count; i++) {
-          const chem = rollChem();
-          addGear(chem);
-          names.push(chem.name);
+          rollChems().forEach(chem => { addGear(chem); names.push(chem.name); });
         }
-        return `Gained ${count} chems: ${names.join(', ')}`;
+        return `Gained ${names.length} chems: ${names.join(', ')}`;
       }
       case 'Supplies': {
         const q = rollQuantity();
@@ -1799,7 +1891,7 @@ export default function RoundTab() {
       )}
       {stage === 'encounter' && currentEncounter && (() => {
         const enc = currentEncounter;
-        const autoDanger = dangerChecks[0];
+        const autoDanger = encounterDanger;
         const danger = dangerOverride ?? autoDanger;
         return (
           <div className="space-y-3">
@@ -1836,7 +1928,7 @@ export default function RoundTab() {
                 </div>
               </div>
               <button
-                onClick={() => setDangerOverride(!danger)}
+                onClick={() => { setDangerOverride(!danger); setEncounterScene({ danger: !danger }); }}
                 className={`shrink-0 border rounded-sm px-2 py-1 text-[10px] uppercase ${danger ? 'border-[#14FF00] text-[#14FF00] hover:bg-[#14FF00] hover:text-black' : 'border-red-500 text-red-500 hover:bg-red-500 hover:text-black'}`}
               >
                 {danger ? "It's safe" : 'Dangerous'}
@@ -1973,7 +2065,44 @@ export default function RoundTab() {
                 })}
               </div>
 
-              {atBlocker && !inDanger && (
+              {blockerOutcome && (
+                <div className="border-2 border-amber-400 p-3 space-y-2 bg-[#1a1405]">
+                  <div className="font-bold text-amber-400 flex items-center gap-2">
+                    <Flag size={16} /> Clear Blocker — {blockerOutcome.name}
+                  </div>
+                  <p className="text-xs normal-case opacity-90">{blockerOutcome.effect}</p>
+                  <div className="space-y-2">
+                    {!blockerOutcome.forcedWin && (
+                      <button
+                        onClick={takeNewBlocker}
+                        className="w-full border-2 border-[#14FF00] p-2 font-bold text-sm hover:bg-[#14FF00] hover:text-black text-left"
+                      >
+                        Generate a new Blocker — keep going (+1 XP, +2 Luck)
+                      </button>
+                    )}
+                    {blockerOutcome.name === 'Failure' ? (
+                      <button
+                        onClick={() => resolveQuestFromBlocker(blockerOutcome.name, blockerOutcome.effect, false)}
+                        className="w-full border-2 border-red-500 text-red-500 p-2 font-bold text-sm hover:bg-red-500 hover:text-black text-left"
+                      >
+                        Give up on the Quest — write the Epilogue
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => resolveQuestFromBlocker(blockerOutcome.name, blockerOutcome.effect, true)}
+                        className="w-full border-2 border-amber-400 text-amber-400 p-2 font-bold text-sm hover:bg-amber-400 hover:text-black text-left"
+                      >
+                        Succeed at your Quest (+3 XP) — write the Epilogue
+                        <span className="block text-[10px] font-normal normal-case opacity-70">
+                          {blockerOutcome.forcedWin ? 'This victory is yours outright.' : 'At the cost this result names.'}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {atBlocker && !inDanger && !blockerOutcome && (
                 <button onClick={clearBlocker}
                   className="w-full border-2 border-red-500/80 text-red-500 p-2 font-bold hover:bg-red-500 hover:text-black text-left">
                   Clear Main Quest Blocker

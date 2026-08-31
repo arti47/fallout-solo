@@ -7,7 +7,8 @@ import { rollCombatStateEntry } from '../data/encounters';
 import { rollInjury } from '../data/characterTables';
 import { runSkillTest, rerollWorstDie } from '../utils/skillTest';
 import type { TestOutcome } from '../utils/skillTest';
-import { resolveFoeTurn, resolveDefeat, lootFoe } from '../utils/combatEngine';
+import { resolveFoeTurn, resolveDefeat, lootFoe, rollBloodyMess } from '../utils/combatEngine';
+import { perkDifficulty, perkPrompts } from '../utils/perkEffects';
 import type { CombatFoeState, TurnEffect, PlayerDamage } from '../utils/combatEngine';
 import {
   Swords, ShieldAlert, Shield, Heart, Zap, Sparkles, Crosshair, MessageCircle,
@@ -83,7 +84,7 @@ interface CombatViewProps {
 
 export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatViewProps) {
   const {
-    activeFoes, combatLog, combatState, hp, maxHp, rads, ap, luck, gear, special, skills,
+    activeFoes, combatLog, combatState, hp, maxHp, rads, ap, luck, gear, special, skills, perks,
     endCombat, addCombatLog, updateFoeThreat, updateHp, updateRads, updateAp, updateLuck,
     addFoe, removeFoe, setFoeBuffs, setCombatState, addGear, appendJournal, addInjury,
     setDanger
@@ -219,10 +220,13 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
       applyDamageToPlayer(dmg, source, false);
     } else {
       const sol = ENDURE_SOLUTIONS[endureSolution];
+      const endurePerks = perkDifficulty(perks, { action: 'Endure', skill: sol.skill, attribute: sol.attr });
+      const endureDiff = Math.max(0, dmg.amount + endurePerks.delta);
+      if (endurePerks.delta !== 0) endurePerks.labels.forEach(l => addCombatLog(l));
       const outcome = runSkillTest(special, skills, {
-        attribute: sol.attr, skillName: sol.skill, difficulty: dmg.amount
+        attribute: sol.attr, skillName: sol.skill, difficulty: endureDiff
       }, special.L);
-      addCombatLog(`ENDURE (${sol.skill}, diff ${dmg.amount}): rolled ${outcome.rolls.join(', ')} → ${outcome.passed ? 'SUCCESS' : 'FAILURE'}`);
+      addCombatLog(`ENDURE (${sol.skill}, diff ${endureDiff}): rolled ${outcome.rolls.join(', ')} → ${outcome.passed ? 'SUCCESS' : 'FAILURE'}`);
       if (outcome.excess > 0) updateAp(1);
       if (outcome.complications > 0) {
         const injury = rollInjury();
@@ -390,6 +394,20 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
     addCombatLog(`${foe.template.name} is defeated.`);
     removeFoe(foe.id);
 
+    // Bloody Mess (pg.152): d20 at or under Luck and the corpse takes another
+    // Foe with it.
+    if (perks.some(p => p.name === 'Bloody Mess')) {
+      const { roll: r, gibs } = rollBloodyMess(special.L);
+      if (gibs) {
+        const victim = useGameState.getState().activeFoes.find(f => f.id !== foe.id);
+        if (victim) {
+          addCombatLog(`BLOODY MESS (${r} vs Luck ${special.L})! ${foe.template.name} explodes, taking ${victim.template.name} with it.`);
+          defeatedFoes.current.push(victim.template as FoeTemplate);
+          removeFoe(victim.id);
+        }
+      }
+    }
+
     if (lowMorale) {
       addCombatLog('LOW MORALE: the remaining foes break and flee!');
       useGameState.getState().activeFoes.forEach(f => removeFoe(f.id));
@@ -453,6 +471,15 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
     }
     if (stateName.includes('Moment of Silence') && (action === 'De-escalate' || action === 'Retreat')) {
       difficulty = Math.max(0, difficulty - 1);
+    }
+    // Perks that change this Difficulty automatically (Animal Friend, Awareness…).
+    const pm = perkDifficulty(perks, {
+      action, skill: sol.skill, attribute: sol.attr,
+      ranged: isRangedSolution(sol), hpBelowHalf: hp * 2 < effMaxHp
+    });
+    if (pm.delta !== 0) {
+      difficulty = Math.max(0, difficulty + pm.delta);
+      pm.labels.forEach(l => addCombatLog(l));
     }
 
     // Try Your Luck (1 LP) is the only pre-roll spend; AP re-roll comes after.
@@ -797,6 +824,12 @@ export default function CombatView({ onExit, initialAction = 'Oppose' }: CombatV
             })}
           </div>
           <p className="text-[11px] normal-case opacity-70">{ACTION_META[selectedAction].hint}</p>
+          {perkPrompts(perks, 'combat').length > 0 && (
+            <div className="border border-cyan-400/40 rounded-sm p-2 text-[10px] normal-case text-cyan-400 space-y-0.5">
+              <div className="font-bold uppercase">Perks you can use</div>
+              {perkPrompts(perks, 'combat').map(t => <div key={t}>• {t}</div>)}
+            </div>
+          )}
 
           {/* Weapon chip (attack modes) */}
           {(selectedAction === 'Oppose' || selectedAction === 'Slaughter') && (

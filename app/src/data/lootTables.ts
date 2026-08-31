@@ -398,10 +398,8 @@ export const rollCaps = (): GearItem => {
   };
 };
 
-export const rollChem = (): GearItem => {
-  let r = roll(20);
-  // On a 1, the book says re-roll twice; we grant the first re-roll here.
-  if (r === 1) r = Math.max(2, roll(20));
+/** One chem from the table for an explicit result (no re-roll handling). */
+const chemAt = (r: number): GearItem => {
   const result = getTableResult(CHEMS, r);
   return {
     id: generateId(),
@@ -414,6 +412,19 @@ export const rollChem = (): GearItem => {
     effects: result.effects
   };
 };
+
+/** Rolls the Chems table (pg.172). A natural 1 means "re-roll twice on the
+ *  table" — i.e. you get TWO chems, so callers that want every item should use
+ *  `rollChems`. `rollChem` keeps the single-item signature and returns the
+ *  first of them. */
+export const rollChems = (): GearItem[] => {
+  const r = roll(20);
+  if (r !== 1) return [chemAt(r)];
+  const again = () => { let x = roll(20); while (x === 1) x = roll(20); return chemAt(x); };
+  return [again(), again()];
+};
+
+export const rollChem = (): GearItem => rollChems()[0];
 
 export const rollScrap = (): GearItem => {
   const result = getTableResult(SCRAP_TABLE, roll2d20());

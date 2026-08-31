@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useGameState } from '../store/gameState';
 import { rollMiraculousEscape } from '../data/characterTables';
+import { rollIcon, rollWastelandTruth, rollSettlementTruth, rollInhabitants, resolveInhabitants } from '../data/encounters';
+import { generateFullNpc, rollFaction } from '../data/npcTables';
+import { rollSettlementReputation } from '../data/characterTables';
 import EpilogueModal from './EpilogueModal';
 import { Skull, HeartCrack, Sparkles } from 'lucide-react';
 
@@ -29,6 +32,79 @@ export default function DeathModal() {
     appendJournal('Knocked to the brink, but this is not the end. The story continues.');
   };
 
+  // Each Escape result carries a real mechanical consequence (pg.218); they
+  // used to be flavour text with a flat 1 HP.
+  const applyEscapeEffect = (name: string) => {
+    const s = useGameState.getState();
+    const adjacent = [s.currentSector - 5, s.currentSector + 5,
+      ...(s.currentSector % 5 !== 1 ? [s.currentSector - 1] : []),
+      ...(s.currentSector % 5 !== 0 ? [s.currentSector + 1] : [])]
+      .filter(n => n >= 1 && n <= 25 && ![3, 8, 21, 24].includes(n));
+    const pick = <T,>(a: T[]): T | undefined => a[Math.floor(Math.random() * a.length)];
+
+    switch (name) {
+      case 'Captured': {
+        // Generate a Location and move there as a prisoner.
+        const target = pick(adjacent) ?? s.currentSector;
+        const isSettlement = resolveInhabitants(rollInhabitants(), false, false) === 'settlement';
+        s.updateSectorData(target, {
+          explored: true, scavengeAvailable: true, isSettlement,
+          icon: rollIcon(),
+          truths: [isSettlement ? rollSettlementTruth() : rollWastelandTruth(), 'You are a captive here'],
+          faction: isSettlement ? rollFaction() : undefined,
+          reputation: isSettlement ? rollSettlementReputation() : undefined
+        });
+        s.setCurrentSector(target);
+        appendJournal(`Captured — you wake in their camp at Square ${target}. Plan your escape.`);
+        break;
+      }
+      case 'Fell': {
+        const target = pick(adjacent) ?? s.currentSector;
+        s.updateSectorData(target, {
+          explored: true,
+          scavengeAvailable: s.sectorData[target]?.scavengeAvailable ?? true,
+          truths: [...(s.sectorData[target]?.truths ?? []), 'Metro: a buried transit line runs beneath']
+        });
+        s.setCurrentSector(target);
+        appendJournal(`Fell through into the metro — you surface at Square ${target}, which gains the Metro Truth.`);
+        break;
+      }
+      case 'Unconscious': {
+        const settlement = Object.entries(s.sectorData).find(([, i]) => i.isSettlement)?.[0];
+        const target = settlement ? Number(settlement) : s.currentSector;
+        s.setCurrentSector(target);
+        const n = generateFullNpc();
+        s.addNpc({
+          name: n.name,
+          description: `${n.age} ${n.demeanor} ${n.profession} (${n.faction}) — watched over you while you were out. Truth: ${n.truth}`,
+          location: target
+        });
+        appendJournal(`Unconscious — you wake at Square ${target} with ${n.name} watching over you. (+1 XP)`);
+        break;
+      }
+      case 'Mysterious Stranger': {
+        // Granted regardless of requirements, so this bypasses addPerk's XP cost.
+        useGameState.setState(st => ({
+          perks: st.perks.some(p => p.name === 'Mysterious Stranger')
+            ? st.perks
+            : [...st.perks, { name: 'Mysterious Stranger', rank: 1 }]
+        }));
+        appendJournal('A man in a trenchcoat finishes the job — you gain the Mysterious Stranger Perk.');
+        break;
+      }
+      case 'Dragged to Safety': {
+        useGameState.setState({
+          gear: [{
+            id: `dog-${Date.now()}`, name: 'Dog (name them)', type: 'Companion',
+            quantity: 1, weight: 0, description: 'Woke you by licking your face. Yours now.'
+          }]
+        });
+        appendJournal('Looted and left for dead — you lose all your equipment, but a Dog wakes you. Name them.');
+        break;
+      }
+    }
+  };
+
   const handleMiraculousEscape = () => {
     const result = rollMiraculousEscape();
     // Spend ALL Luck Points (must spend at least 1).
@@ -39,6 +115,7 @@ export default function DeathModal() {
       updateHp(Math.ceil(Math.max(1, maxHp - rads) / 2));
     } else if (result.name !== 'This Is It…') {
       updateHp(1);
+      applyEscapeEffect(result.name);
     }
   };
 
