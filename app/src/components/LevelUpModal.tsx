@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Wand2 } from 'lucide-react';
 import { useGameState } from '../store/gameState';
 import { PERKS, meetsPerkRequirements } from '../data/perks';
 import { sfx } from '../utils/sound';
@@ -31,6 +31,35 @@ export default function LevelUpModal({ onClose }: Props) {
       setPending({ name: perk.name, choose: onTake.choose });
       setRanksLeft(onTake.ranks ?? 1);
     }
+  };
+
+  /** Picks a sensible Perk and resolves its pay-off, so a player who does not
+   *  want to read forty Perk descriptions can still Level Up. */
+  const chooseForMe = () => {
+    const options = PERKS.filter(canTake);
+    if (options.length === 0) return;
+    const perk = options[Math.floor(Math.random() * options.length)];
+    sfx.levelUp();
+    addPerk(perk.name);
+    const onTake = perkOnTake(perk.name);
+    if (!onTake) { onClose(); return; }
+    // Resolve the choice the same way a thoughtful player would.
+    if (onTake.choose === 'attribute') {
+      const best = (Object.keys(special) as (keyof Special)[])
+        .filter(k => special[k] < 10)
+        .sort((a, b) => special[b] - special[a])[0];
+      if (best) raiseAttribute(best);
+    } else if (onTake.choose === 'tagSkill') {
+      const best = untaggedSkills(skills).sort((a, b) => b.rank - a.rank)[0];
+      if (best) addTagSkill(best.name);
+    } else if (onTake.choose === 'skillRanks') {
+      const targets = [...skills].filter(k => k.rank < 6).sort((a, b) => b.rank - a.rank);
+      for (let i = 0; i < (onTake.ranks ?? 1); i++) {
+        const t = targets[i % Math.max(1, targets.length)];
+        if (t) addSkillRank(t.name, 1);
+      }
+    }
+    onClose();
   };
 
   const attributes: Partial<Record<SpecialAbbrev, number>> = {};
@@ -75,6 +104,14 @@ export default function LevelUpModal({ onClose }: Props) {
             >All</button>
           </div>
         </div>
+
+        <button
+          onClick={chooseForMe}
+          disabled={xp < 1 || visiblePerks.filter(canTake).length === 0}
+          className="w-full border-2 border-amber-400 text-amber-400 p-3 mb-3 font-bold uppercase text-sm hover:bg-amber-400 hover:text-black transition-colors disabled:opacity-30 flex items-center justify-center gap-2"
+        >
+          <Wand2 size={16} /> Choose a Perk for me
+        </button>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
           {visiblePerks.length === 0 && (

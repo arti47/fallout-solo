@@ -21,6 +21,9 @@ import type { TestOutcome } from '../utils/skillTest';
 import LevelUpModal from '../components/LevelUpModal';
 import AnswerBox from '../components/AnswerBox';
 import ScreenHint from '../components/ScreenHint';
+import NextStep from '../components/NextStep';
+import { nextStep } from '../utils/director';
+import type { DirectorStep } from '../utils/director';
 import CombatView from '../components/CombatView';
 import type { PlayerCombatAction } from '../components/CombatView';
 import EpilogueModal from '../components/EpilogueModal';
@@ -935,7 +938,7 @@ export default function RoundTab() {
     updateSectorData, updateSupplies, updateHp, updateRads, updateLuck, updateXp,
     appendJournal, setMainQuest, level, setSideQuestStatus,
     startCombat, setCombatState, updateCaps, addGear, combatActive, perks,
-    encounterFoes, encounterExtras, encounterDanger, setEncounterScene
+    encounterFoes, encounterExtras, encounterDanger, setEncounterScene, markActionTaken
   } = useGameState();
   const { showAlert } = useUIState();
 
@@ -1020,8 +1023,9 @@ export default function RoundTab() {
       return dist <= distance;
     });
 
-  const handleTravel = () => {
-    if (!selectedSquare) return;
+  const handleTravel = (target?: number) => {
+    const destination = target ?? selectedSquare;
+    if (!destination) return;
     // Irradiated location (pg.111): suffer 1 Rad when Traveling OUT of one.
     if (isIrradiated(currentSector)) {
       updateRads(1);
@@ -1041,24 +1045,24 @@ export default function RoundTab() {
       updateSupplies(foraged);
       appendJournal(`Hunter: foraged ${foraged} Supply on the road.`);
     }
-    setCurrentSector(selectedSquare);
+    setCurrentSector(destination);
 
-    const info = sectorData[selectedSquare];
-    let travelNote = `Round ${round}: Traveled to Square ${selectedSquare}.`;
+    const info = sectorData[destination];
+    let travelNote = `Round ${round}: Traveled to Square ${destination}.`;
 
     if (!info?.explored) {
       // Generate the location: Inhabitants → Faction → Icon → Truth (pg.110-111).
       const inhabitants = resolveInhabitants(
         rollInhabitants(),
-        settlementNear(selectedSquare, 2),
-        settlementNear(selectedSquare, 1)
+        settlementNear(destination, 2),
+        settlementNear(destination, 1)
       );
       const newIsSettlement = inhabitants === 'settlement';
       const icon = rollIcon();
       const truth = newIsSettlement ? rollSettlementTruth() : rollWastelandTruth();
       const faction = newIsSettlement ? rollFaction() : undefined;
       const reputation = newIsSettlement ? rollSettlementReputation() : undefined;
-      updateSectorData(selectedSquare, {
+      updateSectorData(destination, {
         explored: true,
         scavengeAvailable: true,
         isSettlement: newIsSettlement,
@@ -1081,7 +1085,7 @@ export default function RoundTab() {
 
     // Mobile Blocker (pg.75): if you travel anywhere else, on a d20 of 5 or
     // lower the Blocker Location shifts to an adjacent unexplored square.
-    if (mainQuest?.blocker === 'Mobile' && mainQuest.blockerLocation && selectedSquare !== mainQuest.blockerLocation) {
+    if (mainQuest?.blocker === 'Mobile' && mainQuest.blockerLocation && destination !== mainQuest.blockerLocation) {
       if (Math.floor(Math.random() * 20) + 1 <= 5) {
         const candidates = Array.from({ length: 25 }, (_, i) => i + 1).filter(n =>
           isAdjacent(mainQuest.blockerLocation!, n) && !IMPASSABLE.includes(n) && !sectorData[n]?.explored);
@@ -1359,6 +1363,7 @@ export default function RoundTab() {
   const clearBlocker = () => {
     if (!mainQuest) return;
     chargeIrradiatedSafeAction();
+    markActionTaken('Clear Main Quest Blocker');
     const result = rollClearBlocker(level);
     if (result.name === 'New Blocker') {
       const newBlocker = rollMainQuestBlocker();
@@ -1632,6 +1637,7 @@ export default function RoundTab() {
   // Point, and the settlement remembers your help (Reputation +1 step).
   const completeSideQuest = (index: number) => {
     chargeIrradiatedSafeAction();
+    markActionTaken('Complete Side Quest');
     const quest = sideQuests[index];
     setSideQuestStatus(index, 'Completed');
     updateXp(1);
@@ -1689,6 +1695,31 @@ export default function RoundTab() {
     completeRound();
   };
 
+  // The Director's recommendation, and the one handler that carries it out.
+  const step = nextStep(useGameState.getState());
+  const runStep = (d: DirectorStep) => {
+    switch (d.kind) {
+      case 'travel':
+        if (d.square) { setSelectedSquare(d.square); setTimeout(() => handleTravel(d.square!), 0); }
+        break;
+      case 'proceed': proceedToAction(false); break;
+      case 'fight': startCombatWithMode('Oppose'); break;
+      case 'openAction': {
+        const a = ACTIONS.find(x => x.name === d.action);
+        if (a) setActiveAction(a);
+        break;
+      }
+      case 'clearBlocker': clearBlocker(); break;
+      case 'completeSideQuest':
+        if (d.questIndex !== undefined) completeSideQuest(d.questIndex);
+        break;
+      case 'levelUp': setLevelAtOpen(useGameState.getState().level); setShowLevelUp(true); break;
+      case 'goToJournal': setStage('journal'); break;
+      case 'finishRound': finishRound(); break;
+      case 'endStory': setEpilogueKind('quest'); break;
+    }
+  };
+
   // =================== RENDER ===================
   // A fight in progress takes over the Round page — resolved in place, no
   // tab-hop. On exit CombatView returns us to the right stage.
@@ -1699,6 +1730,7 @@ export default function RoundTab() {
           <h2 className="text-xl font-bold tracking-widest">ROUND {round}</h2>
           <span className="text-sm opacity-70">Square {currentSector}</span>
         </div>
+        <NextStep step={step} onGo={runStep} />
         <ScreenHint id="combat" />
         <CombatView onExit={(toStage) => setStage(toStage)} initialAction={initialCombatAction} />
       </div>
@@ -1725,6 +1757,8 @@ export default function RoundTab() {
           ))}
         </div>
       </div>
+
+      <NextStep step={step} onGo={runStep} />
 
       {/* ============ TRAVEL ============ */}
       {stage === 'travel' && (
@@ -1857,7 +1891,7 @@ export default function RoundTab() {
               </div>
 
               {adjacentSquares.includes(selectedSquare) && (
-                <button onClick={handleTravel} className="w-full border-2 border-[#14FF00] p-2 font-bold hover:bg-[#14FF00] hover:text-black">
+                <button onClick={() => handleTravel()} className="w-full border-2 border-[#14FF00] p-2 font-bold hover:bg-[#14FF00] hover:text-black">
                   Travel ({supplies >= 1 ? '-1 Supply' : '-2 HP!'})
                 </button>
               )}
@@ -2035,6 +2069,7 @@ export default function RoundTab() {
               onDone={() => {
                 // Every Safe Action (tested or not) exposes you in an irradiated location.
                 if (activeAction?.category === 'safe') chargeIrradiatedSafeAction();
+                if (activeAction) markActionTaken(activeAction.name);
                 setActiveAction(null);
               }}
               onFoes={(foes) => setEncounterFoes(prev => [...prev, ...foes])}
@@ -2250,6 +2285,7 @@ export default function RoundTab() {
       {epilogueKind && <EpilogueModal kind={epilogueKind} onClose={() => setEpilogueKind(null)} />}
 
       {showLevelUp && <LevelUpModal onClose={() => {
+        markActionTaken('Level Up');
         // Leveling Up is a Safe Action — if a level was actually gained here, the irradiated ground still bites.
         if (useGameState.getState().level > levelAtOpen) chargeIrradiatedSafeAction();
         setShowLevelUp(false);

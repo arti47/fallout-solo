@@ -9,8 +9,10 @@ import { SCREEN_HINTS } from '../data/screenHints';
  *  entirely in Data → SYS.MGMT. */
 export default function ScreenHint({ id }: { id: string }) {
   const hintsEnabled = useGameState(s => s.hintsEnabled);
-  const collapsed = useGameState(s => s.collapsedHints.includes(id));
-  const toggleHintCollapsed = useGameState(s => s.toggleHintCollapsed);
+  // Collapsed unless the player opens it: the Director already says what to do,
+  // so these are reference, not instruction.
+  const collapsed = !useGameState(s => s.expandedHints).includes(id);
+  const toggleHintExpanded = useGameState(s => s.toggleHintExpanded);
 
   const hint = SCREEN_HINTS[id];
   if (!hintsEnabled || !hint) return null;
@@ -18,7 +20,7 @@ export default function ScreenHint({ id }: { id: string }) {
   return (
     <div className="border border-[#14FF00]/40 bg-[#051a05]">
       <button
-        onClick={() => toggleHintCollapsed(id)}
+        onClick={() => toggleHintExpanded(id)}
         className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-[#14FF00]/10"
       >
         <HelpCircle size={14} className="shrink-0 mt-0.5 opacity-70" />
